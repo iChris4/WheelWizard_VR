@@ -40,6 +40,7 @@ public interface ISettingsProperties
     Setting LAUNCH_WITH_DOLPHIN { get; }
     Setting LAUNCH_RR_ON_STARTUP { get; }
     Setting ENABLE_RECOMP { get; }
+    Setting ENABLE_RECOMP_VR { get; }
     Setting RECOMP_USE_DOLPHIN_DATA { get; }
     Setting RECOMP_COPY_DOLPHIN_NAND { get; }
     Setting PREFERS_MODS_ROW_VIEW { get; }
@@ -64,6 +65,12 @@ public interface ISettingsProperties
     Setting RECOMP_SHOW_FPS { get; }
     Setting RECOMP_PREVENT_STUTTERS { get; }
     Setting RECOMP_NAND_ROOT { get; }
+    Setting RECOMP_VR_ENABLED { get; }
+    Setting RECOMP_VR_MIRROR_VIEW { get; }
+    Setting RECOMP_VR_FIRST_PERSON { get; }
+    Setting RECOMP_VR_FIRST_PERSON_ROTATION { get; }
+    Setting RECOMP_VR_HIDE_DRIVER { get; }
+    Setting RECOMP_VR_RENDER_SCALE { get; }
 }
 
 public interface ISettingsManager : ISettingsProperties

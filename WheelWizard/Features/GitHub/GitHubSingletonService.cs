@@ -1,4 +1,4 @@
-﻿using WheelWizard.GitHub.Domain;
+using WheelWizard.GitHub.Domain;
 using WheelWizard.Shared.Services;
 
 namespace WheelWizard.GitHub;
@@ -18,7 +18,7 @@ public interface IGitHubSingletonService
 
 public class GitHubSingletonService(IApiCaller<IGitHubApi> apiService) : IGitHubSingletonService
 {
-    public async Task<OperationResult<List<GithubRelease>>> GetReleasesAsync() => await GetReleasesAsync("TeamWheelWizard", "WheelWizard");
+    public async Task<OperationResult<List<GithubRelease>>> GetReleasesAsync() => await GetReleasesAsync("iChris4", "WheelWizard_VR");
 
     public async Task<OperationResult<List<GithubRelease>>> GetReleasesAsync(string owner, string repository, int count = 3)
     {

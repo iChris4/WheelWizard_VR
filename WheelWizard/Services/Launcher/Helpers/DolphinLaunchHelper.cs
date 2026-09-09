@@ -215,7 +215,9 @@ public static class DolphinLaunchHelper
     public static async Task<OperationResult> LaunchDolphin(
         string arguments = "",
         bool shellExecute = false,
-        OperationResult? versionPreflightResult = null
+        OperationResult? versionPreflightResult = null,
+        bool waitForExit = false,
+        bool operationAlreadyCoordinated = false
     )
     {
         versionPreflightResult ??= await PreflightDolphinVersionAsync();
@@ -224,6 +226,11 @@ public static class DolphinLaunchHelper
 
         try
         {
+            using var operation = operationAlreadyCoordinated ? null : WheelWizard.Recomp.RecompOperationCoordinator.Acquire();
+            WheelWizard.CustomDistributions.RetroRewindContentTransaction.Recover(
+                new Testably.Abstractions.RealFileSystem(),
+                PathManager.RiivolutionWhWzFolderPath
+            );
             var startInfo = new ProcessStartInfo();
 
             var cannotPassUserFolder = RuntimeInformation.IsOSPlatform(OSPlatform.Linux) && PathManager.IsLinuxDolphinConfigSplit();
@@ -255,7 +262,9 @@ public static class DolphinLaunchHelper
                 startInfo.UseShellExecute = false;
             }
 
-            Process.Start(startInfo);
+            using var process = Process.Start(startInfo) ?? throw new InvalidOperationException("Could not start Dolphin.");
+            if (waitForExit || !operationAlreadyCoordinated)
+                await process.WaitForExitAsync();
             return Ok();
         }
         catch (Exception ex)

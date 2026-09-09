@@ -42,7 +42,7 @@ public static class Endpoints
 
     // Branding Urls
     public const string WhWzDiscordUrl = "https://discord.gg/vZ7T2wJnsq";
-    public const string WhWzGithubUrl = "https://github.com/TeamWheelWizard/WheelWizard";
+    public const string WhWzGithubUrl = "https://github.com/iChris4/WheelWizard_VR";
     public const string SupportLink = "https://ko-fi.com/wheelwizard";
 
     // Other

@@ -42,7 +42,7 @@ public partial class SettingsPage : UserControlBase
 
     private void OnSettingChanged(SettingChangedSignal signal)
     {
-        if (signal.Setting == SettingsService.ENABLE_RECOMP)
+        if (signal.Setting == SettingsService.ENABLE_RECOMP || signal.Setting == SettingsService.ENABLE_RECOMP_VR)
             UpdateTabVisibility();
     }
 
@@ -54,6 +54,7 @@ public partial class SettingsPage : UserControlBase
     {
         var recompMode = SettingsService.IsRecompModeActive();
         RecompSettingsTab.IsVisible = recompMode;
+        RecompSettingsTab.Content = SettingsService.Get<bool>(SettingsService.ENABLE_RECOMP_VR) ? "OpenXR VR" : "WiiCompiled";
         VideoSettingsTab.IsVisible = !recompMode;
 
         // Never leave the content on a tab that just disappeared.

@@ -8,8 +8,10 @@ namespace WheelWizard.Settings;
 /// Reads and writes the recomp's <c>Config.toml</c> the same way <see cref="DolphinSettingManager"/>
 /// handles Dolphin's ini files. The file has two writers
 /// </summary>
-public class RecompSettingManager(IFileSystem fileSystem) : IRecompSettingManager
+public class RecompSettingManager(IFileSystem fileSystem, WheelWizard.Recomp.RecompBackendSelection? backendSelection = null)
+    : IRecompSettingManager
 {
+    private string ConfigPath => backendSelection?.ConfigPath ?? PathManager.RecompConfigFilePath;
     private readonly object _syncRoot = new();
     private readonly object _fileIoSync = new();
     private bool _loaded;
@@ -45,6 +47,8 @@ public class RecompSettingManager(IFileSystem fileSystem) : IRecompSettingManage
         lock (_syncRoot)
         {
             _loaded = false;
+            foreach (var setting in _settings)
+                setting.Set(setting.DefaultValue, skipSave: true);
         }
 
         LoadSettings();
@@ -73,7 +77,7 @@ public class RecompSettingManager(IFileSystem fileSystem) : IRecompSettingManage
                     continue;
 
                 lines.RemoveAt(i);
-                fileSystem.File.WriteAllLines(PathManager.RecompConfigFilePath, lines);
+                fileSystem.File.WriteAllLines(ConfigPath, lines);
                 return;
             }
         }
@@ -82,7 +86,7 @@ public class RecompSettingManager(IFileSystem fileSystem) : IRecompSettingManage
     public void LoadSettings()
     {
         List<RecompSetting> settingsSnapshot;
-        if (_loaded || !fileSystem.File.Exists(PathManager.RecompConfigFilePath))
+        if (_loaded || !fileSystem.File.Exists(ConfigPath))
             return;
 
         lock (_syncRoot)
@@ -110,12 +114,12 @@ public class RecompSettingManager(IFileSystem fileSystem) : IRecompSettingManage
 
     private string[]? ReadTomlFile()
     {
-        if (!fileSystem.File.Exists(PathManager.RecompConfigFilePath))
+        if (!fileSystem.File.Exists(ConfigPath))
             return null;
 
         try
         {
-            return fileSystem.File.ReadAllLines(PathManager.RecompConfigFilePath);
+            return fileSystem.File.ReadAllLines(ConfigPath);
         }
         catch
         {
@@ -170,7 +174,7 @@ public class RecompSettingManager(IFileSystem fileSystem) : IRecompSettingManage
                 lines.Add(string.Empty);
             lines.Add($"[{section}]");
             lines.Add($"{settingToChange} = {value}");
-            fileSystem.File.WriteAllLines(PathManager.RecompConfigFilePath, lines);
+            fileSystem.File.WriteAllLines(ConfigPath, lines);
             return;
         }
 
@@ -184,12 +188,12 @@ public class RecompSettingManager(IFileSystem fileSystem) : IRecompSettingManage
                 continue;
 
             lines[i] = $"{settingToChange} = {value}";
-            fileSystem.File.WriteAllLines(PathManager.RecompConfigFilePath, lines);
+            fileSystem.File.WriteAllLines(ConfigPath, lines);
             return;
         }
 
         lines.Insert(sectionIndex + 1, $"{settingToChange} = {value}");
-        fileSystem.File.WriteAllLines(PathManager.RecompConfigFilePath, lines);
+        fileSystem.File.WriteAllLines(ConfigPath, lines);
     }
 
     private static bool IsSettingLine(string trimmedLine, string settingName) =>

@@ -66,7 +66,10 @@ public class App : Application
         for (var i = 1; i < args.Length; i++)
         {
             var argument = args[i];
-            if (argument.StartsWith("wheelwizard://", StringComparison.OrdinalIgnoreCase))
+            if (
+                argument.StartsWith("wheelwizardvr://", StringComparison.OrdinalIgnoreCase)
+                || argument.StartsWith("wheelwizard://", StringComparison.OrdinalIgnoreCase)
+            )
                 return argument;
         }
 

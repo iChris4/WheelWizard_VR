@@ -3,6 +3,7 @@ using System.Runtime.InteropServices;
 using WheelWizard.DolphinInstaller;
 using WheelWizard.Helpers;
 using WheelWizard.Models.Enums;
+using WheelWizard.Recomp;
 using WheelWizard.Services;
 using WheelWizard.Settings.Types;
 
@@ -20,6 +21,7 @@ public class SettingsManager : ISettingsManager
     private readonly Setting _dolphinSsaa;
     private readonly Setting _dolphinMsaa;
 
+    private readonly RecompBackendSelection _backendSelection;
     private bool _hasLoadedSettings;
     private double _internalScale = -1.0;
 
@@ -28,18 +30,21 @@ public class SettingsManager : ISettingsManager
         IWhWzSettingManager whWzSettingManager,
         IDolphinSettingManager dolphinSettingManager,
         IRecompSettingManager recompSettingManager,
-        IFileSystem fileSystem
+        IFileSystem fileSystem,
+        RecompBackendSelection? backendSelection = null
     )
     {
         _whWzSettingManager = whWzSettingManager;
         _dolphinSettingManager = dolphinSettingManager;
         _recompSettingManager = recompSettingManager;
         _fileSystem = fileSystem;
+        _backendSelection = backendSelection ?? new RecompBackendSelection();
 
         #region WhWz settings
         // Register this first because the path validators use the active frontend mode when deciding
         // whether Dolphin-only locations may be left blank.
         ENABLE_RECOMP = RegisterWhWz("EnableRecomp", false);
+        ENABLE_RECOMP_VR = RegisterWhWz("EnableRecompVR", false);
         // Whether WiiCompiled directly shares Dolphin's live NAND. Disabled means private mode;
         // private mode uses the imported clone below when one exists, otherwise the runtime default.
         RECOMP_USE_DOLPHIN_DATA = RegisterWhWz("RecompUseDolphinData", false);
@@ -167,6 +172,13 @@ public class SettingsManager : ISettingsManager
         RECOMP_GRAPHICS_API = RegisterRecomp(("video", "graphics_api"), "auto");
         RECOMP_SHOW_FPS = RegisterRecomp(("video", "show_fps"), true);
         RECOMP_PREVENT_STUTTERS = RegisterRecomp(("video", "skip_unready_pipelines"), true);
+        // Managed VR installations enable OpenXR initially; explicit desktop choices are retained.
+        RECOMP_VR_ENABLED = RegisterRecomp(("vr", "enabled"), true);
+        RECOMP_VR_MIRROR_VIEW = RegisterRecomp(("vr", "mirror_view"), "normal");
+        RECOMP_VR_FIRST_PERSON = RegisterRecomp(("vr", "first_person"), false);
+        RECOMP_VR_FIRST_PERSON_ROTATION = RegisterRecomp(("vr", "first_person_rotation"), "yaw");
+        RECOMP_VR_HIDE_DRIVER = RegisterRecomp(("vr", "first_person_hide_driver"), true);
+        RECOMP_VR_RENDER_SCALE = RegisterRecomp(("vr", "render_scale"), 1.0);
         // The Wii data folder the runtime should use, written by RecompDolphinDataService after an
         // install and whenever the sharing choice changes. Empty/absent means the runtime's private NAND.
         RECOMP_NAND_ROOT = RegisterRecomp(("paths", "nand_root"), "");
@@ -219,6 +231,7 @@ public class SettingsManager : ISettingsManager
     public Setting LAUNCH_WITH_DOLPHIN { get; }
     public Setting LAUNCH_RR_ON_STARTUP { get; }
     public Setting ENABLE_RECOMP { get; }
+    public Setting ENABLE_RECOMP_VR { get; }
     public Setting RECOMP_USE_DOLPHIN_DATA { get; }
     public Setting RECOMP_COPY_DOLPHIN_NAND { get; }
     public Setting PREFERS_MODS_ROW_VIEW { get; }
@@ -244,6 +257,12 @@ public class SettingsManager : ISettingsManager
     public Setting RECOMP_SHOW_FPS { get; }
     public Setting RECOMP_PREVENT_STUTTERS { get; }
     public Setting RECOMP_NAND_ROOT { get; }
+    public Setting RECOMP_VR_ENABLED { get; }
+    public Setting RECOMP_VR_MIRROR_VIEW { get; }
+    public Setting RECOMP_VR_FIRST_PERSON { get; }
+    public Setting RECOMP_VR_FIRST_PERSON_ROTATION { get; }
+    public Setting RECOMP_VR_HIDE_DRIVER { get; }
+    public Setting RECOMP_VR_RENDER_SCALE { get; }
     #endregion
 
     #region Public API
@@ -261,6 +280,22 @@ public class SettingsManager : ISettingsManager
         if (value == null)
             throw new ArgumentNullException(nameof(value));
 
+        if (RecompOperationCoordinator.IsBusy && (setting == GAME_LOCATION || setting == DOLPHIN_LOCATION))
+            return false;
+
+        if (setting == ENABLE_RECOMP || setting == ENABLE_RECOMP_VR)
+        {
+            if (RecompOperationCoordinator.IsBusy)
+                return false;
+            using var lease = RecompOperationCoordinator.Acquire(PathManager.WheelWizardAppdataPath, _fileSystem);
+            var enabled = value is true;
+            if (enabled)
+                (setting == ENABLE_RECOMP ? ENABLE_RECOMP_VR : ENABLE_RECOMP).Set(false, skipSave: true);
+            var changed = setting.Set(value, skipSave);
+            _backendSelection.Restore(Get<bool>(ENABLE_RECOMP), Get<bool>(ENABLE_RECOMP_VR));
+            _recompSettingManager.ReloadSettings();
+            return changed;
+        }
         return setting.Set(value, skipSave);
     }
 
@@ -283,7 +318,7 @@ public class SettingsManager : ISettingsManager
 
     private OperationResult<SettingsValidationReport> ValidateDolphinPathSettings() => ValidatePathSettings(requireDolphin: true);
 
-    public bool IsRecompModeActive() => OperatingSystem.IsWindows() && Get<bool>(ENABLE_RECOMP);
+    public bool IsRecompModeActive() => OperatingSystem.IsWindows() && (Get<bool>(ENABLE_RECOMP) || Get<bool>(ENABLE_RECOMP_VR));
 
     private OperationResult<SettingsValidationReport> ValidatePathSettings(bool requireDolphin)
     {
@@ -316,6 +351,9 @@ public class SettingsManager : ISettingsManager
             return;
 
         _whWzSettingManager.LoadSettings();
+        if (Get<bool>(ENABLE_RECOMP_VR))
+            ENABLE_RECOMP.Set(false, skipSave: true);
+        _backendSelection.Restore(Get<bool>(ENABLE_RECOMP), Get<bool>(ENABLE_RECOMP_VR));
         _dolphinSettingManager.LoadSettings();
         _recompSettingManager.LoadSettings();
         _hasLoadedSettings = true;

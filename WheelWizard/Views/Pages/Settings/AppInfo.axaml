@@ -5,7 +5,8 @@
              mc:Ignorable="d" d:DesignWidth="444" d:DesignHeight="716"
              xmlns:components="clr-namespace:WheelWizard.Views.Components"
              x:Class="WheelWizard.Views.Pages.Settings.AppInfo">
-    <Grid>
+    <Grid RowDefinitions="*,Auto">
+        <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
         <StackPanel Margin="0,5,0,0">
             
             <!-- WHWZ DEVS -->
@@ -58,6 +59,23 @@
                 </Grid>
             </Border>
             
+            <!-- OPENXR VR -->
+            <Border Classes="AboutBlockStyle" Margin="0,10,0,0">
+                <Grid ColumnDefinitions="60,*" MinHeight="38">
+                    <Path Data="M12,7 V5 Q12,2 15,2 H25 Q28,2 28,5 V7
+                                M6,7 H34 Q38,7 38,11 V23 Q38,27 34,27 H26
+                                L22,23 Q20,21 18,23 L14,27 H6 Q2,27 2,23 V11 Q2,7 6,7 Z
+                                M10,13 H14 Q16,13 16,15 V17 Q16,19 14,19 H10 Q8,19 8,17 V15 Q8,13 10,13 Z
+                                M26,13 H30 Q32,13 32,15 V17 Q32,19 30,19 H26 Q24,19 24,17 V15 Q24,13 26,13 Z"
+                          Stroke="{StaticResource Primary300}" StrokeThickness="2"
+                          Stretch="Uniform" Width="38" Height="30" Margin="1,0,0,0"
+                          HorizontalAlignment="Left" VerticalAlignment="Center" />
+                    <Border Grid.Column="0" Classes="AboutBlockLineStyle" HorizontalAlignment="Right" />
+                    <components:FormFieldLabel Grid.Column="1" Text="OpenXR VR by iChris4"
+                                               VerticalAlignment="Center" />
+                </Grid>
+            </Border>
+
             <!-- ROBOTO FONTS-->
             <Border Classes="AboutBlockStyle" Margin="0,10,0,0">
                 <Grid ColumnDefinitions="60,*">
@@ -136,8 +154,9 @@
             </Border>
             <Border Classes="SettingsBottomSpacer" />
         </StackPanel>
+        </ScrollViewer>
         
-        <StackPanel HorizontalAlignment="Right" VerticalAlignment="Bottom">
+        <StackPanel Grid.Row="1" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,8,0,0">
             <SelectableTextBlock x:Name="ReleaseText" HorizontalAlignment="Right" Classes="TinyText" Text="DEV BUILD"/>
             <SelectableTextBlock x:Name="WhWzVersionText" HorizontalAlignment="Right" Classes="TinyText" Text="Example WhWz version 1.0.0" />
             <SelectableTextBlock x:Name="RrVersionText" HorizontalAlignment="Right" Classes="TinyText" Text="Example RR version 1.0.0" />

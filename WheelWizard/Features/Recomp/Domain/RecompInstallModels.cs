@@ -21,6 +21,7 @@ public sealed record RecompRelease(string TagName, SemVersion Version, string Se
 /// </summary>
 public class RecompInstallState
 {
+    public string? ProductId { get; set; }
     public int? SchemaVersion { get; set; }
     public string? SetupVersion { get; set; }
     public string? InstallDir { get; set; }

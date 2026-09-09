@@ -9,6 +9,8 @@ namespace WheelWizard.Recomp;
 
 public interface IRecompInstallService : IDisposable
 {
+    void SelectGame(RecompGame game);
+
     /// <summary>
     /// True while this service owns an install, a pre-launch reconciliation or a running play session.
     /// A status read taken during one cannot see the truth: the operation holds this service's gate
@@ -73,9 +75,8 @@ public interface IRecompInstallService : IDisposable
     Task<OperationResult> LaunchAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Removes the WiiCompiled installation, its runtime user state and the setup cache. The recomp is
-    /// a portable installation, which the contract says is uninstalled by deleting its directories:
-    /// no registry entry exists and the Retro Rewind installation is deliberately left in place.
+    /// Removes only this backend's portable installation and setup cache. Configuration, shared NAND,
+    /// imported Wii data, and the canonical Retro Rewind content remain available for reinstall.
     /// </summary>
     Task<OperationResult> UninstallAsync(CancellationToken cancellationToken = default);
 }
@@ -83,6 +84,17 @@ public interface IRecompInstallService : IDisposable
 /// <inheritdoc />
 public sealed class RecompInstallService : IRecompInstallService
 {
+    private RecompBackend Backend => environment.Backend ?? RecompBackend.Normal;
+    private RecompGame _game = RecompGame.RetroRewind;
+
+    public void SelectGame(RecompGame game)
+    {
+        if (OperationInFlight)
+            throw new InvalidOperationException(OperationAlreadyRunningMessage);
+        _launchReconciled = false;
+        _game = game;
+    }
+
     // How the three phases of an install divide up the 0-100 progress bar.
     private const int DownloadPercentFloor = 5;
     private const int SetupPercentFloor = 35;
@@ -197,13 +209,15 @@ public sealed class RecompInstallService : IRecompInstallService
             hasInstalledHost ? installedVersion : null,
             latestRelease?.TagName,
             products?.IsSuccess == true ? products.Value : null,
-            installationBusy
+            installationBusy,
+            _game
         );
 
         // A build that skipped the payload is healthy as far as the host is concerned, but it cannot
         // play online. Once the payload service is back, that is an update worth offering.
         if (
-            status is (WheelWizardStatus.Ready or WheelWizardStatus.NoServerButInstalled)
+            _game == RecompGame.RetroRewind
+            && status is (WheelWizardStatus.Ready or WheelWizardStatus.NoServerButInstalled)
             && await RetroWfcUpgradeAvailableAsync(state, cancellationToken)
         )
             return WheelWizardStatus.OutOfDate;
@@ -318,6 +332,12 @@ public sealed class RecompInstallService : IRecompInstallService
         var state = ReadCurrentInstallState();
         if (state is null)
             return Fail("WiiCompiled requires a current install-state.json for its fixed installation path.");
+
+        if (
+            Backend.Kind == RecompBackendKind.OpenXR
+            && !await SetupMatchesVersionAsync(environment.InstalledSetupFilePath, state.SetupVersion, cancellationToken)
+        )
+            return Fail("The installed setup does not identify itself as the expected OpenXR VR release.");
 
         var products = new EventHolder<RecompProductsEvent>();
         var runResult = await processRunner.RunAsync(
@@ -453,6 +473,18 @@ public sealed class RecompInstallService : IRecompInstallService
         if (!await SetupMatchesVersionAsync(environment.InstalledSetupFilePath, state.SetupVersion, cancellationToken))
             return Fail("The installed WiiCompiled host does not match its current install state.");
 
+        if (_game == RecompGame.Base)
+        {
+            var baseCheck = await CheckProductsCoreAsync(cancellationToken);
+            if (baseCheck.IsFailure)
+                return baseCheck.Error;
+            if (baseCheck.Value.Base.IsCurrent)
+            {
+                _launchReconciled = true;
+                return Ok();
+            }
+        }
+
         // A launch never asks about offline play and never forces the payload upgrade: the user pressed
         // Play, not Update. A repair the check demands anyway still gains the payload when it is reachable.
         var payloadModeResult = await ResolveRetroWfcPayloadModeAsync(state, confirmOfflineInstall: null, cancellationToken);
@@ -512,9 +544,17 @@ public sealed class RecompInstallService : IRecompInstallService
         if (!reconciled)
             return Fail("WiiCompiled must complete its current pre-launch reconciliation before it can launch.");
 
+        if (Backend.Kind == RecompBackendKind.OpenXR)
+        {
+            RecompConfig.PrepareVr(
+                fileSystem,
+                WheelWizard.Services.PathManager.RecompConfigFilePath,
+                fileSystem.Path.Combine(environment.UserDataFolderPath, "Config.toml")
+            );
+        }
         var launchResult = await processRunner.RunAsync(
             environment.InstalledSetupFilePath,
-            RecompSetupCommandBuilder.BuildLaunchArguments(retroRewind: true),
+            RecompSetupCommandBuilder.BuildLaunchArguments(retroRewind: _game == RecompGame.RetroRewind),
             environment.InstallFolderPath,
             onStandardOutputLine: null,
             cancellationToken
@@ -548,12 +588,20 @@ public sealed class RecompInstallService : IRecompInstallService
         return TryCatch(
             () =>
             {
+                using var sharedOperation = RecompOperationCoordinator.Acquire(
+                    WheelWizard.Services.PathManager.WheelWizardAppdataPath,
+                    fileSystem
+                );
+                if (
+                    !PathsMatch(environment.InstallFolderPath, Backend.Install(WheelWizard.Services.PathManager.WheelWizardAppdataPath))
+                    || !PathsMatch(
+                        environment.CacheFolderPath,
+                        Path.Combine(Backend.Root(WheelWizard.Services.PathManager.WheelWizardAppdataPath), "Cache")
+                    )
+                )
+                    throw new IOException("The uninstall target does not match the selected backend.");
                 DeleteFolderIfPresent(environment.InstallFolderPath);
-                DeleteFolderIfPresent(environment.UserDataFolderPath);
                 DeleteFolderIfPresent(environment.CacheFolderPath);
-                DeleteFolderIfPresent(environment.NandCopyFolderPath);
-                if (fileSystem.File.Exists(environment.PortableMarkerFilePath))
-                    fileSystem.File.Delete(environment.PortableMarkerFilePath);
                 logger.LogInformation("Uninstalled WiiCompiled from {InstallFolder}", environment.InstallFolderPath);
             },
             errorMessage: "Could not remove the WiiCompiled installation."
@@ -563,7 +611,12 @@ public sealed class RecompInstallService : IRecompInstallService
     private void DeleteFolderIfPresent(string folderPath)
     {
         if (!string.IsNullOrWhiteSpace(folderPath) && fileSystem.Directory.Exists(folderPath))
+        {
+            for (var current = fileSystem.DirectoryInfo.New(folderPath); current is not null; current = current.Parent)
+                if ((current.Attributes & FileAttributes.ReparsePoint) != 0)
+                    throw new IOException("Cannot uninstall through a junction or symbolic link.");
             fileSystem.Directory.Delete(folderPath, recursive: true);
+        }
     }
 
     private async Task<OperationResult<string>> EnsureSetupDownloadedAsync(
@@ -673,10 +726,22 @@ public sealed class RecompInstallService : IRecompInstallService
             cancellationToken
         );
 
-        return runResult.IsSuccess
+        var versionMatches =
+            runResult.IsSuccess
             && runResult.Value == 0
             && RecompVersion.TryParse(versionText, out var cachedVersion)
             && cachedVersion.ComparePrecedenceTo(expected) == 0;
+        if (!versionMatches || Backend.Kind != RecompBackendKind.OpenXR)
+            return versionMatches;
+        var identityValid = false;
+        var info = await processRunner.RunAsync(
+            setupFilePath,
+            "--info-json",
+            workingDirectory: null,
+            line => identityValid |= RecompSetupIdentity.IsMatchingVr(line, expectedVersion!),
+            cancellationToken
+        );
+        return info.IsSuccess && info.Value == 0 && identityValid;
     }
 
     private bool VersionsMatch(string? first, string? second) =>
@@ -896,6 +961,17 @@ public sealed class RecompInstallService : IRecompInstallService
         if (setupResult is null || resultHolder.Count != 1)
             return Fail("The recomp installer did not report exactly one terminal result.");
 
+        if (Backend.Kind == RecompBackendKind.OpenXR)
+        {
+            if (ReadCurrentInstallState() is null)
+                return Fail("The installer did not publish a matching OpenXR VR installation identity.");
+            RecompConfig.PrepareVr(
+                fileSystem,
+                WheelWizard.Services.PathManager.RecompConfigFilePath,
+                fileSystem.Path.Combine(environment.UserDataFolderPath, "Config.toml")
+            );
+        }
+
         _launchReconciled = false;
         if (reportCompletion)
             Report(progress, t("progress.recomp_finished"), 100);
@@ -906,11 +982,7 @@ public sealed class RecompInstallService : IRecompInstallService
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        var releasesResult = await gitHubService.GetReleasesAsync(
-            RecompReleaseResolver.RepositoryOwner,
-            RecompReleaseResolver.RepositoryName,
-            count: 100
-        );
+        var releasesResult = await gitHubService.GetReleasesAsync(Backend.RepositoryOwner, Backend.RepositoryName, count: 100);
         if (releasesResult.IsFailure)
         {
             logger.LogWarning("Could not retrieve the recomp releases: {Message}", releasesResult.Error.Message);
@@ -945,6 +1017,11 @@ public sealed class RecompInstallService : IRecompInstallService
 
     private bool IsCurrentInstallState(RecompInstallState? state) =>
         state is { SchemaVersion: CurrentInstallStateSchemaVersion }
+        && (
+            Backend.Kind == RecompBackendKind.OpenXR
+                ? state.ProductId == RecompBackend.VrProductId
+                : string.IsNullOrEmpty(state.ProductId) || state.ProductId == "wiicompiled"
+        )
         && RecompVersion.TryParse(state.SetupVersion, out _)
         && PathsMatch(state.InstallDir, environment.InstallFolderPath);
 

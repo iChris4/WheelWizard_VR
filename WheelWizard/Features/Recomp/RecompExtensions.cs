@@ -28,11 +28,11 @@ public static class RecompExtensions
             );
 
         services.AddSingleton<IRecompDolphinDataService, RecompDolphinDataService>();
-        services.AddSingleton<IRecompEnvironment, RecompEnvironment>();
+        services.AddTransient<IRecompEnvironment, RecompEnvironment>();
         services.AddSingleton<IRecompProcessRunner, RecompProcessRunner>();
         services.AddSingleton<IRecompSetupDownloader, RecompSetupDownloader>();
         services.AddSingleton<IRecompRetroWfcPayloadProbe, RecompRetroWfcPayloadProbe>();
-        services.AddSingleton<IRecompInstallService, RecompInstallService>();
+        services.AddTransient<IRecompInstallService, RecompInstallService>();
         services.AddTransient<RecompLauncher>();
 
         return services;

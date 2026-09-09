@@ -11,6 +11,7 @@ public static class SettingsExtensions
 
         // TODO:  Investigate / migrate to IOptions: https://learn.microsoft.com/en-us/dotnet/core/extensions/options
 
+        services.AddSingleton<WheelWizard.Recomp.RecompBackendSelection>();
         services.AddSingleton<ISettingsSignalBus, SettingsSignalBus>();
         services.AddSingleton<IWhWzSettingManager, WhWzSettingManager>();
         services.AddSingleton<IDolphinSettingManager, DolphinSettingManager>();

@@ -116,6 +116,71 @@
                 </Border>
             </StackPanel>
 
+            <StackPanel x:Name="VrSection" IsVisible="False" Margin="0,10,0,7" Spacing="4">
+                <components:FormFieldLabel Text="Virtual reality" />
+                <TextBlock Classes="TinyText" TextWrapping="Wrap" Margin="0,0,0,6" Text="Changes apply on the next launch. The default recenter key in game is F9." />
+                <Border Classes="SettingsBlockStyle SettingsRowStyle SettingsRowTop">
+                    <Grid ColumnDefinitions="*,Auto" MinHeight="40">
+                        <StackPanel Margin="0,0,12,0" Spacing="3" VerticalAlignment="Center">
+                            <TextBlock Classes="BodyText" TextWrapping="Wrap" Text="Enable OpenXR" />
+                            <TextBlock Classes="TinyText" TextWrapping="Wrap" Text="Turn off to play this installation on desktop. If a headset is unavailable, desktop fallback remains available." />
+                        </StackPanel>
+                        <CheckBox Grid.Column="1" x:Name="VrEnabled" Classes="SwitchDark"
+                                   HorizontalAlignment="Right" VerticalAlignment="Center" />
+                    </Grid>
+                </Border>
+                <Border Classes="SettingsBlockStyle SettingsRowStyle SettingsRowMiddle">
+                    <Grid ColumnDefinitions="*,Auto" MinHeight="40">
+                        <StackPanel Margin="0,0,12,0" Spacing="3" VerticalAlignment="Center">
+                            <TextBlock Classes="BodyText" TextWrapping="Wrap" Text="Desktop view" />
+                            <TextBlock Classes="TinyText" TextWrapping="Wrap" Text="Choose what the desktop window shows while the headset is running." />
+                        </StackPanel>
+                        <ComboBox Grid.Column="1" x:Name="VrMirrorDropdown" Width="150"
+                                   HorizontalAlignment="Right" VerticalAlignment="Center" />
+                    </Grid>
+                </Border>
+                <Border Classes="SettingsBlockStyle SettingsRowStyle SettingsRowMiddle">
+                    <Grid ColumnDefinitions="*,Auto" MinHeight="40">
+                        <StackPanel Margin="0,0,12,0" Spacing="3" VerticalAlignment="Center">
+                            <TextBlock Classes="BodyText" TextWrapping="Wrap" Text="Camera" />
+                            <TextBlock Classes="TinyText" TextWrapping="Wrap" Text="Use the chase camera or sit in the driver’s position." />
+                        </StackPanel>
+                        <ComboBox Grid.Column="1" x:Name="VrCameraDropdown" Width="150"
+                                   HorizontalAlignment="Right" VerticalAlignment="Center" />
+                    </Grid>
+                </Border>
+                <Border Classes="SettingsBlockStyle SettingsRowStyle SettingsRowMiddle">
+                    <Grid ColumnDefinitions="*,Auto" MinHeight="40">
+                        <StackPanel Margin="0,0,12,0" Spacing="3" VerticalAlignment="Center">
+                            <TextBlock Classes="BodyText" TextWrapping="Wrap" Text="Follow kart rotation" />
+                            <TextBlock Classes="TinyText" TextWrapping="Wrap" Text="In first person, follow turning only, turning and pitch, or all kart rotation." />
+                        </StackPanel>
+                        <ComboBox Grid.Column="1" x:Name="VrRotationDropdown" Width="150"
+                                   HorizontalAlignment="Right" VerticalAlignment="Center" />
+                    </Grid>
+                </Border>
+                <Border Classes="SettingsBlockStyle SettingsRowStyle SettingsRowMiddle">
+                    <Grid ColumnDefinitions="*,Auto" MinHeight="40">
+                        <StackPanel Margin="0,0,12,0" Spacing="3" VerticalAlignment="Center">
+                            <TextBlock Classes="BodyText" TextWrapping="Wrap" Text="Hide driver" />
+                            <TextBlock Classes="TinyText" TextWrapping="Wrap" Text="Hide the driver model in first person." />
+                        </StackPanel>
+                        <CheckBox Grid.Column="1" x:Name="VrHideDriver" Classes="SwitchDark"
+                                   HorizontalAlignment="Right" VerticalAlignment="Center" />
+                    </Grid>
+                </Border>
+                <Border Classes="SettingsBlockStyle SettingsRowStyle SettingsRowBottom">
+                    <Grid ColumnDefinitions="*,Auto" MinHeight="40">
+                        <StackPanel Margin="0,0,12,0" Spacing="3" VerticalAlignment="Center">
+                            <TextBlock Classes="BodyText" TextWrapping="Wrap" Text="Headset render scale" />
+                            <TextBlock Classes="TinyText" TextWrapping="Wrap" Text="Higher values improve clarity and increase GPU load. Applies on the next launch." />
+                        </StackPanel>
+                        <NumericUpDown Grid.Column="1" x:Name="VrRenderScale" Width="120" Minimum="0.25" Maximum="2" Increment="0.05" FormatString="0.00"
+                                   HorizontalAlignment="Right" VerticalAlignment="Center" />
+                    </Grid>
+                </Border>
+            </StackPanel>
+
             <components:FormFieldLabel x:Name="InstallationSectionLabel"
                                        Text="{loc:T section.setup}" Margin="0,10,0,4" />
             <StackPanel x:Name="InstallationBorder"

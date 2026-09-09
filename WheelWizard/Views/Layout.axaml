@@ -1,4 +1,4 @@
-﻿<Window xmlns="https://github.com/avaloniaui"
+<Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -42,7 +42,7 @@
         <Border Grid.Column="0" Grid.Row="0" Grid.RowSpan="3" VerticalAlignment="Bottom">
             <components:IconLabel IconData="{StaticResource WheelIcon}" x:Name="TitleLabel"
                                   Foreground="{StaticResource Neutral400}"
-                                  FontSize="20" IconSize="31"
+                                  FontSize="16" IconSize="26"
                                   Margin="10,10,0,18"
                                   PointerPressed="TitleLabel_OnPointerPressed" />
         </Border>

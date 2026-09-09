@@ -1,5 +1,7 @@
 using Avalonia.Interactivity;
+using Avalonia.Threading;
 using WheelWizard.CustomDistributions;
+using WheelWizard.Recomp;
 using WheelWizard.Services;
 using WheelWizard.Settings;
 using WheelWizard.Shared.DependencyInjection;
@@ -10,6 +12,7 @@ namespace WheelWizard.Views.Pages.Settings;
 public partial class OtherSettings : UserControlBase
 {
     private readonly bool _settingsAreDisabled;
+    private bool _loadingModes;
 
     [Inject]
     private ICustomDistributionSingletonService CustomDistributionSingletonService { get; set; } = null!;
@@ -37,6 +40,10 @@ public partial class OtherSettings : UserControlBase
         // Attach event handlers after loading settings to avoid unwanted triggers
         LaunchRrOnStartup.IsCheckedChanged += ClickLaunchRrOnStartup;
         EnableRecomp.IsCheckedChanged += ClickEnableRecomp;
+        EnableRecompVR.IsCheckedChanged += ClickEnableRecomp;
+        AttachedToVisualTree += (_, _) => RecompOperationCoordinator.Changed += RefreshModeAvailability;
+        DetachedFromVisualTree += (_, _) => RecompOperationCoordinator.Changed -= RefreshModeAvailability;
+        RefreshModeAvailability();
     }
 
     private void LoadSettings()
@@ -55,8 +62,9 @@ public partial class OtherSettings : UserControlBase
         var recompSupported = OperatingSystem.IsWindows();
         RecompSectionLabel.IsVisible = recompSupported;
         RecompBorder.IsVisible = recompSupported;
+        RecompVrBorder.IsVisible = recompSupported;
         if (recompSupported)
-            EnableRecomp.IsChecked = SettingsService.Get<bool>(SettingsService.ENABLE_RECOMP);
+            RefreshModes();
     }
 
     private void RefreshRetroRewindVersion()
@@ -72,16 +80,72 @@ public partial class OtherSettings : UserControlBase
 
     private void ClickEnableRecomp(object? sender, RoutedEventArgs e)
     {
-        SettingsService.Set(SettingsService.ENABLE_RECOMP, EnableRecomp.IsChecked == true);
+        if (_loadingModes)
+            return;
+        try
+        {
+            var vr = ReferenceEquals(sender, EnableRecompVR);
+            SettingsService.Set(
+                vr ? SettingsService.ENABLE_RECOMP_VR : SettingsService.ENABLE_RECOMP,
+                vr ? EnableRecompVR.IsChecked == true : EnableRecomp.IsChecked == true
+            );
+        }
+        catch (IOException)
+        {
+            _ = new MessageBoxWindow().SetTitleText("WiiCompiled is busy").SetInfoText(RecompOperationCoordinator.BusyMessage).ShowDialog();
+        }
+        finally
+        {
+            RefreshModes();
+        }
     }
+
+    private void RefreshModes()
+    {
+        _loadingModes = true;
+        EnableRecomp.IsChecked = SettingsService.Get<bool>(SettingsService.ENABLE_RECOMP);
+        EnableRecompVR.IsChecked = SettingsService.Get<bool>(SettingsService.ENABLE_RECOMP_VR);
+        _loadingModes = false;
+    }
+
+    private void RefreshModeAvailability() =>
+        Dispatcher.UIThread.Post(() =>
+        {
+            EnableRecomp.IsEnabled = EnableRecompVR.IsEnabled = !RecompOperationCoordinator.IsBusy;
+        });
 
     private async void Reinstall_RetroRewind(object sender, RoutedEventArgs e)
     {
+        IDisposable operation;
+        try
+        {
+            operation = RecompOperationCoordinator.Acquire();
+        }
+        catch (IOException)
+        {
+            await new MessageBoxWindow()
+                .SetTitleText("WiiCompiled is busy")
+                .SetInfoText(RecompOperationCoordinator.BusyMessage)
+                .ShowDialog();
+            return;
+        }
+        using var lease = operation;
         var progressWindow = new ProgressWindow();
         progressWindow.Show();
-        await CustomDistributionSingletonService.RetroRewind.ReinstallAsync(progressWindow);
-        progressWindow.Close();
-        RefreshRetroRewindVersion();
+        try
+        {
+            var result = await CustomDistributionSingletonService.RetroRewind.ReinstallAsync(progressWindow);
+            if (result.IsFailure)
+                await new MessageBoxWindow()
+                    .SetTitleText("Retro Rewind installation failed")
+                    .SetInfoText(result.Error.Message)
+                    .ShowDialog();
+        }
+        finally
+        {
+            progressWindow.Close();
+            RefreshRetroRewindVersion();
+        }
     }
 
     private void OpenSaveFolder_OnClick(object? sender, RoutedEventArgs e)

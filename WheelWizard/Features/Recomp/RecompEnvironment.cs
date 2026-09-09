@@ -9,6 +9,8 @@ namespace WheelWizard.Recomp;
 /// </summary>
 public interface IRecompEnvironment
 {
+    RecompBackend Backend => RecompBackend.Normal;
+
     /// <summary>The user's Mario Kart Wii disc image.</summary>
     string GameFilePath { get; }
 
@@ -47,25 +49,28 @@ public interface IRecompEnvironment
 }
 
 /// <inheritdoc />
-public sealed class RecompEnvironment(IFileSystem fileSystem) : IRecompEnvironment
+public sealed class RecompEnvironment(IFileSystem fileSystem, RecompBackendSelection selection) : IRecompEnvironment
 {
-    public string GameFilePath => PathManager.GameFilePath;
+    public RecompBackend Backend { get; } = selection.Backend;
+    private string Root { get; } = selection.Backend.Root(PathManager.WheelWizardAppdataPath);
+    private readonly string _retroRoot = PathManager.RetroRewind6FolderPath;
+    public string GameFilePath { get; } = PathManager.GameFilePath;
 
-    public string InstallFolderPath => PathManager.RecompInstallFolderPath;
+    public string InstallFolderPath => Path.Combine(Root, "Install");
 
     public bool IsPortableInstall => PathManager.IsRecompInstallPortable;
 
-    public string CacheFolderPath => PathManager.RecompCacheFolderPath;
+    public string CacheFolderPath => Path.Combine(Root, "Cache");
 
-    public string UserDataFolderPath => PathManager.RecompUserDataFolderPath;
+    public string UserDataFolderPath => Path.Combine(Root, "UserData");
 
-    public string PortableMarkerFilePath => PathManager.RecompPortableMarkerFilePath;
+    public string PortableMarkerFilePath => Path.Combine(Root, "portable.txt");
 
-    public string InstallStateFilePath => PathManager.RecompInstallStateFilePath;
+    public string InstallStateFilePath => Path.Combine(InstallFolderPath, "install-state.json");
 
-    public string InstalledSetupFilePath => PathManager.RecompSetupFilePath;
+    public string InstalledSetupFilePath => Path.Combine(InstallFolderPath, "WiiCompiled-Setup.exe");
 
-    public string? RetroRewindFolderPath => ExistingFolderOrNull(PathManager.RetroRewind6FolderPath);
+    public string? RetroRewindFolderPath => ExistingFolderOrNull(_retroRoot);
 
     public string NandCopyFolderPath => PathManager.RecompNandCopyFolderPath;
 

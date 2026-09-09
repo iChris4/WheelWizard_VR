@@ -31,6 +31,7 @@ public interface IRecompDolphinDataService
 public sealed class RecompDolphinDataService(ISettingsManager settings, IRecompSettingManager recompSettings, IFileSystem fileSystem)
     : IRecompDolphinDataService
 {
+    private bool _nandChoiceChanged;
     public bool IsSharingEnabled => settings.Get<bool>(settings.RECOMP_USE_DOLPHIN_DATA);
 
     public bool CopyEnabled => settings.Get<bool>(settings.RECOMP_COPY_DOLPHIN_NAND);
@@ -41,6 +42,13 @@ public sealed class RecompDolphinDataService(ISettingsManager settings, IRecompS
     {
         get
         {
+            if (!_nandChoiceChanged)
+            {
+                var normalConfig = PathManager.RecompConfigFilePath;
+                var configured = RecompConfig.ReadString(fileSystem, normalConfig, "paths", "nand_root");
+                if (!string.IsNullOrWhiteSpace(configured))
+                    return fileSystem.Path.GetFullPath(configured, fileSystem.Path.GetDirectoryName(normalConfig)!);
+            }
             // Sharing always means Dolphin's live NAND, even when a private clone is kept for the
             // next time sharing is disabled.
             if (IsSharingEnabled)
@@ -82,13 +90,21 @@ public sealed class RecompDolphinDataService(ISettingsManager settings, IRecompS
         if (!settings.Set(settings.USER_FOLDER_PATH, validated))
             return Fail("Wheel Wizard could not save the Dolphin user folder.");
 
-        settings.Set(settings.RECOMP_USE_DOLPHIN_DATA, true);
+        SetSharingEnabled(true);
         return Ok();
     }
 
-    public void SetSharingEnabled(bool enabled) => settings.Set(settings.RECOMP_USE_DOLPHIN_DATA, enabled);
+    public void SetSharingEnabled(bool enabled)
+    {
+        _nandChoiceChanged = true;
+        settings.Set(settings.RECOMP_USE_DOLPHIN_DATA, enabled);
+    }
 
-    public void SetCopyEnabled(bool enabled) => settings.Set(settings.RECOMP_COPY_DOLPHIN_NAND, enabled);
+    public void SetCopyEnabled(bool enabled)
+    {
+        _nandChoiceChanged = true;
+        settings.Set(settings.RECOMP_COPY_DOLPHIN_NAND, enabled);
+    }
 
     public OperationResult CopyNandForRecomp()
     {
@@ -97,59 +113,91 @@ public sealed class RecompDolphinDataService(ISettingsManager settings, IRecompS
             return Fail("No Dolphin Wii data folder was found to copy.");
 
         var destination = PathManager.RecompNandCopyFolderPath;
+        var staging = destination + ".copy-" + Guid.NewGuid().ToString("N");
+        var backup = destination + ".backup-" + Guid.NewGuid().ToString("N");
         try
         {
+            CopyDirectory(source, staging);
             if (fileSystem.Directory.Exists(destination))
-                fileSystem.Directory.Delete(destination, recursive: true);
-            CopyDirectory(source, destination);
+                fileSystem.Directory.Move(destination, backup);
+            fileSystem.Directory.Move(staging, destination);
         }
         catch (Exception)
         {
-            // A half-written copy must not survive: NandFolderPath would hand the recomp a NAND with
-            // silently missing saves. Deleting it makes the failure loud and the state honest.
+            // Discard incomplete staging and restore the prior NAND if publication failed.
             try
             {
-                if (fileSystem.Directory.Exists(destination))
-                    fileSystem.Directory.Delete(destination, recursive: true);
+                if (fileSystem.Directory.Exists(staging))
+                    fileSystem.Directory.Delete(staging, recursive: true);
+                if (fileSystem.Directory.Exists(backup) && !fileSystem.Directory.Exists(destination))
+                    fileSystem.Directory.Move(backup, destination);
             }
             catch
             {
-                // The partial copy could not be removed either; the validation on read still guards it.
+                // Keep staging and backup for manual recovery if the filesystem is unavailable.
             }
 
             return Fail("Wheel Wizard could not copy the Dolphin Wii data folder.");
         }
+
+        // Retain the previous NAND as a backup: both backends may have made progress in it.
 
         return Ok();
     }
 
     public OperationResult ApplyNandToRecompConfig()
     {
-        var nandFolderPath = NandFolderPath?.TrimEnd('\\', '/');
+        var configPaths = new[] { RecompBackend.Normal, RecompBackend.OpenXR }
+            .Select(backend => backend.Config(PathManager.WheelWizardAppdataPath))
+            .Where(fileSystem.File.Exists)
+            .ToArray();
+        var snapshots = configPaths.ToDictionary(path => path, fileSystem.File.ReadAllText);
         try
         {
-            // The backend owns creating Config.toml, so reread first: right after an install the
-            // file is brand new and this manager may never have seen it. Without a file there is
-            // nothing to configure yet, and the next successful install applies this again.
-            recompSettings.ReloadSettings();
-
-            if (nandFolderPath is null)
-            {
-                recompSettings.RemoveTomlSetting("paths", "nand_root");
-                settings.Set(settings.RECOMP_NAND_ROOT, "", skipSave: true);
+            if (configPaths.Length == 0)
                 return Ok();
+            var selected = NandFolderPath;
+            if (IsSharingEnabled && selected is null)
+                return Fail("The shared Dolphin NAND is missing. Relink it before launching.");
+            var nand = selected ?? PathManager.RecompPrivateNandFolderPath;
+            if (selected is not null && !fileSystem.Directory.Exists(nand))
+                return Fail("The configured shared NAND is missing. Restore or relink it before launching.");
+            fileSystem.Directory.CreateDirectory(nand);
+            foreach (var path in configPaths)
+            {
+                var previous = RecompConfig.ReadString(fileSystem, path, "paths", "nand_root");
+                var configDirectory = fileSystem.Path.GetDirectoryName(path)!;
+                var effective = string.IsNullOrWhiteSpace(previous)
+                    ? fileSystem.Path.Combine(configDirectory, "NAND")
+                    : fileSystem.Path.GetFullPath(previous, configDirectory);
+                if (
+                    string.Equals(
+                        Path.TrimEndingDirectorySeparator(effective),
+                        Path.TrimEndingDirectorySeparator(nand),
+                        StringComparison.OrdinalIgnoreCase
+                    )
+                )
+                    continue;
+                var stored = Path.GetRelativePath(fileSystem.Path.GetDirectoryName(path)!, nand).Replace('\\', '/');
+                RecompConfig.Set(fileSystem, path, "paths", "nand_root", RecompConfig.Quote(stored));
             }
-
-            // Reset before assigning so the write happens even when this process already holds the
-            // same value in memory - a reinstall recreates Config.toml without the key, and only
-            // an actual change would otherwise be saved.
-            settings.Set(settings.RECOMP_NAND_ROOT, "", skipSave: true);
-            return settings.Set(settings.RECOMP_NAND_ROOT, nandFolderPath)
-                ? Ok()
-                : Fail("Wheel Wizard could not save the Wii data folder to the WiiCompiled configuration.");
+            _nandChoiceChanged = false;
+            recompSettings.ReloadSettings();
+            return Ok();
         }
         catch (Exception exception)
         {
+            foreach (var (path, text) in snapshots)
+            {
+                try
+                {
+                    RecompConfig.WriteAtomic(fileSystem, path, text);
+                }
+                catch (Exception restoreError)
+                {
+                    return Fail($"Could not restore the shared NAND configuration at {path}: {restoreError.Message}");
+                }
+            }
             return Fail($"Wheel Wizard could not update the WiiCompiled configuration: {exception.Message}");
         }
     }

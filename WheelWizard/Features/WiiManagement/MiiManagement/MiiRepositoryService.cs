@@ -107,10 +107,19 @@ public class MiiRepositoryServiceService(
         return result;
     }
 
-    public OperationResult SaveAllBlocks(List<byte[]> blocks)
+    public OperationResult SaveAllBlocks(List<byte[]> blocks) => GuardMutation(() => SaveAllBlocks(blocks, ResolveMiiDbFilePath()));
+
+    private OperationResult GuardMutation(Func<OperationResult> action)
     {
-        var databasePath = ResolveMiiDbFilePath();
-        return SaveAllBlocks(blocks, databasePath);
+        try
+        {
+            using var operation = RecompOperationCoordinator.Acquire(PathManager.WheelWizardAppdataPath, fileSystem);
+            return action();
+        }
+        catch (IOException ex)
+        {
+            return Fail(ex.Message);
+        }
     }
 
     private OperationResult SaveAllBlocks(List<byte[]> blocks, string databasePath)
@@ -184,7 +193,9 @@ public class MiiRepositoryServiceService(
         return fileSystem.File.Exists(databasePath);
     }
 
-    public OperationResult ForceCreateDatabase()
+    public OperationResult ForceCreateDatabase() => GuardMutation(ForceCreateDatabaseCore);
+
+    private OperationResult ForceCreateDatabaseCore()
     {
         var databasePath = ResolveMiiDbFilePath();
         if (fileSystem.File.Exists(databasePath))
@@ -223,7 +234,10 @@ public class MiiRepositoryServiceService(
         return Ok();
     }
 
-    public OperationResult UpdateBlockByClientId(uint clientId, byte[] newBlock)
+    public OperationResult UpdateBlockByClientId(uint clientId, byte[] newBlock) =>
+        GuardMutation(() => UpdateBlockByClientIdCore(clientId, newBlock));
+
+    private OperationResult UpdateBlockByClientIdCore(uint clientId, byte[] newBlock)
     {
         var databasePath = ResolveMiiDbFilePath();
         if (clientId == 0)
@@ -266,7 +280,9 @@ public class MiiRepositoryServiceService(
         }
     }
 
-    public OperationResult AddMiiToBlocks(byte[]? rawMiiData)
+    public OperationResult AddMiiToBlocks(byte[]? rawMiiData) => GuardMutation(() => AddMiiToBlocksCore(rawMiiData));
+
+    private OperationResult AddMiiToBlocksCore(byte[]? rawMiiData)
     {
         var databasePath = ResolveMiiDbFilePath();
         if (rawMiiData is not { Length: MiiLength })

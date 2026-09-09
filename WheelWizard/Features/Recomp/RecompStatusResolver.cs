@@ -28,7 +28,8 @@ public static class RecompStatusResolver
         string? installedVersion,
         string? latestVersion,
         RecompProductsEvent? products,
-        bool installationBusy = false
+        bool installationBusy = false,
+        RecompGame game = RecompGame.RetroRewind
     )
     {
         if (!gameFileConfigured)
@@ -51,7 +52,12 @@ public static class RecompStatusResolver
         // A failed or incomplete check is fail-closed. The installed host can perform a targeted repair
         // without GitHub, so an update remains actionable even offline.
         // A blocked product always requires action, so ActionRequired already covers it.
-        if (products is null || products.ActionRequired || !products.Base.IsCurrent || !products.RetroRewind.IsCurrent)
+        if (
+            products is null
+            || !products.ProtocolValid
+            || !products.Base.IsCurrent
+            || (game == RecompGame.RetroRewind && (products.ActionRequired || !products.RetroRewind.IsCurrent))
+        )
             return WheelWizardStatus.OutOfDate;
 
         // Installed but GitHub is unreachable: the checked products are still playable offline.

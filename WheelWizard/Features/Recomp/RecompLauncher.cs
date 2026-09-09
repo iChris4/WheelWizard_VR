@@ -12,17 +12,28 @@ namespace WheelWizard.Recomp;
 /// <summary>
 /// Exposes the Mario Kart Wii recomp as a regular WheelWizard launcher. It owns nothing but the UI
 /// wiring: every decision about installing, updating and launching lives in <see cref="IRecompInstallService"/>,
-/// which in turn only drives the recomp's own setup executable. Concurrent operations are refused by
-/// the install service's own gate, so this class holds no locking of its own.
+/// which in turn drives the recomp's setup executable. A shared lease covers preparation, setup,
+/// and the full game session across both backends and launcher processes.
 /// </summary>
 public class RecompLauncher(
     IRecompInstallService installService,
     ICustomDistributionSingletonService customDistributions,
     IModsLaunchService modsLaunchService,
-    IRecompDolphinDataService dolphinData
+    IRecompDolphinDataService dolphinData,
+    IRecompEnvironment environment
 ) : ILauncher
 {
-    public string GameTitle { get; } = "WiiCompiled";
+    private RecompGame _game = RecompGame.RetroRewind;
+    public string GameName => _game == RecompGame.Base ? "Base game" : "Retro Rewind";
+    public string BackendName => environment.Backend.DisplayName;
+    public string GameTitle => $"{GameName} — {BackendName}";
+
+    public RecompLauncher WithGame(RecompGame game)
+    {
+        _game = game;
+        installService.SelectGame(game);
+        return this;
+    }
 
     public async Task<OperationResult> Launch()
     {
@@ -40,9 +51,14 @@ public class RecompLauncher(
 
         try
         {
+            using var operation = RecompOperationCoordinator.Acquire();
+            RetroRewindContentTransaction.Recover(new Testably.Abstractions.RealFileSystem(), PathManager.RiivolutionWhWzFolderPath);
+            var nand = dolphinData.ApplyNandToRecompConfig();
+            if (nand.IsFailure)
+                return nand;
             var targetFolderPath = PathManager.PatchesFolderPath;
             var clearTargetFolder = false;
-            if (modsLaunchService.ShouldAskToClearTargetFolder(targetFolderPath))
+            if (_game == RecompGame.RetroRewind && modsLaunchService.ShouldAskToClearTargetFolder(targetFolderPath))
             {
                 clearTargetFolder = await new YesNoWindow()
                     .SetButtonText(t("action.delete"), t("action.keep"))
@@ -51,9 +67,12 @@ public class RecompLauncher(
                     .AwaitAnswer();
             }
 
-            var modsLaunchResult = await modsLaunchService.PrepareModsForLaunch(targetFolderPath, clearTargetFolder);
-            if (modsLaunchResult.IsFailure)
-                return modsLaunchResult.Error;
+            if (_game == RecompGame.RetroRewind)
+            {
+                var modsLaunchResult = await modsLaunchService.PrepareModsForLaunch(targetFolderPath, clearTargetFolder);
+                if (modsLaunchResult.IsFailure)
+                    return modsLaunchResult.Error;
+            }
 
             progressWindow.Show();
             var reconciliation = await installService.ReconcileForLaunchAsync(progress, cancellationTokenSource.Token);
@@ -75,6 +94,10 @@ public class RecompLauncher(
         {
             return CancellationWarning("WiiCompiled launch preparation was cancelled.");
         }
+        catch (IOException ex)
+        {
+            return Fail(ex.Message);
+        }
         finally
         {
             progressWindow.Close();
@@ -83,6 +106,16 @@ public class RecompLauncher(
 
     public async Task<OperationResult> Install()
     {
+        IDisposable operation;
+        try
+        {
+            operation = RecompOperationCoordinator.Acquire();
+        }
+        catch (IOException ex)
+        {
+            return Fail(ex.Message);
+        }
+        using var lease = operation;
         var nandChoice = await AskForDolphinNandChoiceAsync();
         if (nandChoice.IsFailure)
             return nandChoice;
@@ -104,6 +137,16 @@ public class RecompLauncher(
     /// </summary>
     public async Task<OperationResult> Update()
     {
+        IDisposable operation;
+        try
+        {
+            operation = RecompOperationCoordinator.Acquire();
+        }
+        catch (IOException ex)
+        {
+            return Fail(ex.Message);
+        }
+        using var lease = operation;
         var updateResult = await RunSetupAsync(t("progress.updating_recomp"));
         if (updateResult.IsFailure)
             return updateResult;
@@ -115,12 +158,14 @@ public class RecompLauncher(
     {
         // While a launch or setup operation is running, the session only got this far by being
         // ready
-        if (installService.OperationInFlight)
+        if (installService.OperationInFlight || RecompOperationCoordinator.IsBusy)
             return WheelWizardStatus.Ready;
 
         try
         {
             var retroRewindStatus = await customDistributions.RetroRewind.GetCurrentStatusAsync();
+            if (_game == RecompGame.Base && installService.IsInstalled)
+                return await installService.GetCurrentStatusAsync();
             if (retroRewindStatus.IsFailure)
                 return WheelWizardStatus.NoServer;
 
@@ -156,7 +201,11 @@ public class RecompLauncher(
     /// </summary>
     private async Task<OperationResult> AskForDolphinNandChoiceAsync()
     {
-        if (installService.IsInstalled)
+        if (
+            installService.IsInstalled
+            || File.Exists(PathManager.RecompConfigFilePath)
+            || Directory.Exists(PathManager.RecompPrivateNandFolderPath)
+        )
             return Ok();
 
         var sourceNand = await Task.Run(() => dolphinData.SourceNandFolderPath);

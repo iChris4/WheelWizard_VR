@@ -18,7 +18,8 @@ public static class PathManager
 
     private const string WheelWizardFolderName = "CT-MKWII";
 #if WINDOWS
-    private const string WindowsAppDataOverrideRegistryKeyPath = @"Software\\WheelWizard";
+    private const string WindowsAppDataOverrideRegistryKeyPath = @"Software\\WheelWizardVR";
+    private const string LegacyWindowsAppDataOverrideRegistryKeyPath = @"Software\\WheelWizard";
     private const string WindowsAppDataOverrideRegistryValueName = "AppDataLocation";
 #endif
     private static readonly object WheelWizardAppdataLock = new();
@@ -71,7 +72,8 @@ public static class PathManager
         }
     }
 
-    public static string WheelWizardConfigFilePath => Path.Combine(WheelWizardAppdataPath, "config.json");
+    public static string WheelWizardConfigFilePath => Path.Combine(WheelWizardAppdataPath, "config-vr.json");
+    public static string LegacyWheelWizardConfigFilePath => Path.Combine(WheelWizardAppdataPath, "config.json");
     public static string RrLaunchJsonFilePath => Path.Combine(WheelWizardAppdataPath, "RR.json");
     public static string ModsFolderPath => Path.Combine(WheelWizardAppdataPath, "Mods");
     public static string TempModsFolderPath => Path.Combine(ModsFolderPath, "Temp");
@@ -172,13 +174,13 @@ public static class PathManager
         {
             try
             {
-                using var key = Registry.CurrentUser.OpenSubKey(WindowsAppDataOverrideRegistryKeyPath, writable: false);
-                if (key != null)
-                {
-                    var value = key.GetValue(WindowsAppDataOverrideRegistryValueName) as string;
-                    if (!string.IsNullOrWhiteSpace(value))
-                        return value;
-                }
+                using var key = Registry.CurrentUser.CreateSubKey(WindowsAppDataOverrideRegistryKeyPath, writable: true);
+                if (key.GetValue(WindowsAppDataOverrideRegistryValueName) is string saved)
+                    return saved;
+                using var legacy = Registry.CurrentUser.OpenSubKey(LegacyWindowsAppDataOverrideRegistryKeyPath, writable: false);
+                var imported = legacy?.GetValue(WindowsAppDataOverrideRegistryValueName) as string ?? string.Empty;
+                key.SetValue(WindowsAppDataOverrideRegistryValueName, imported, RegistryValueKind.String);
+                return imported;
             }
             catch
             {
@@ -214,6 +216,12 @@ public static class PathManager
             deleteSourceRequested: false,
             sourceDeletionSucceeded: true
         );
+
+        if (WheelWizard.Recomp.RecompOperationCoordinator.IsBusy)
+        {
+            errorMessage = WheelWizard.Recomp.RecompOperationCoordinator.BusyMessage;
+            return false;
+        }
 
         if (
             !TryValidateWheelWizardAppdataTarget(
@@ -258,6 +266,17 @@ public static class PathManager
             return false;
         }
 
+        IDisposable operation;
+        try
+        {
+            operation = WheelWizard.Recomp.RecompOperationCoordinator.AcquireForRelocation(currentPath);
+        }
+        catch (IOException ex)
+        {
+            errorMessage = ex.Message;
+            return false;
+        }
+        using var relocationLease = operation;
         var newOverrideValue = FileHelper.PathsEqual(normalizedTarget, DefaultWheelWizardAppdataPath) ? null : normalizedTarget;
 
         try
@@ -503,7 +522,7 @@ public static class PathManager
             try
             {
                 using var key = Registry.CurrentUser.OpenSubKey(WindowsAppDataOverrideRegistryKeyPath, writable: true);
-                key?.DeleteValue(WindowsAppDataOverrideRegistryValueName, throwOnMissingValue: false);
+                key?.SetValue(WindowsAppDataOverrideRegistryValueName, string.Empty, RegistryValueKind.String);
             }
             catch
             {

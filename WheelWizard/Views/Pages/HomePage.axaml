@@ -107,6 +107,7 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="{StaticResource TopRowSize}" />
             <!-- This is the total height as the (Title + infoSection) - (padding) -->
+            <RowDefinition Height="Auto" />
             <RowDefinition />
         </Grid.RowDefinitions>
         <Border Grid.Row="0" Background="{StaticResource BackgroundLineColor}" Height="1" HorizontalAlignment="Stretch"
@@ -114,31 +115,32 @@
         <TextBlock Grid.Row="0" Text="{loc:T page_title.home}" HorizontalAlignment="Left"
                    VerticalAlignment="Bottom"
                    Classes="PageTitleText" />
-        <Border Grid.Row="1" Background="{StaticResource BackgroundLineColor}" Height="1" HorizontalAlignment="Stretch"
+        <Border Grid.Row="2" Background="{StaticResource BackgroundLineColor}" Height="1" HorizontalAlignment="Stretch"
                 VerticalAlignment="Bottom" />
 
-        <StackPanel Grid.Row="1" Orientation="Horizontal" VerticalAlignment="Top" Margin="0,6"
+        <StackPanel Grid.Row="1" Orientation="Horizontal" VerticalAlignment="Top" Margin="0,10" Spacing="12"
                     HorizontalAlignment="Right"
                     x:Name="GameModeOption">
             <components:FormFieldLabel Text="Game mode:" VerticalAlignment="Center" />
             <ComboBox x:Name="GameModeDropdown"
-                      SelectionChanged="GameModeDropdown_OnSelectionChanged" MinWidth="160"
+                      SelectionChanged="GameModeDropdown_OnSelectionChanged" Width="170"
                       VerticalAlignment="Top" />
         </StackPanel>
 
+        <Grid Grid.Row="2" ClipToBounds="True">
         <!-- These are invisible by default, they will be set to visible once the button is turned to green 
             This way we don't have to take in account whether or not an animation can play, since if it plays but it is not allowed, it will be invisible anyways -->
-        <components:WheelTrail Grid.Row="1" HorizontalAlignment="Left" VerticalAlignment="Top" x:Name="HomeTrail1"
+        <components:WheelTrail HorizontalAlignment="Left" VerticalAlignment="Top" x:Name="HomeTrail1"
                                Width="137" Angle="45" Y="-60" X="-20" ExtendedHeight="1000" IsVisible="False"
                                Background="{StaticResource Primary400}" Foreground="{StaticResource Primary700}" />
-        <components:WheelTrail Grid.Row="1" HorizontalAlignment="Left" VerticalAlignment="Top" x:Name="HomeTrail2"
+        <components:WheelTrail HorizontalAlignment="Left" VerticalAlignment="Top" x:Name="HomeTrail2"
                                Width="137" Angle="45" Y="-40" X="170" ExtendedHeight="1000" IsVisible="False"
                                Background="{StaticResource Primary600}" Foreground="{StaticResource Primary800}" />
-        <components:WheelTrail Grid.Row="1" HorizontalAlignment="Left" VerticalAlignment="Top" x:Name="HomeTrail3"
+        <components:WheelTrail HorizontalAlignment="Left" VerticalAlignment="Top" x:Name="HomeTrail3"
                                Width="137" Angle="45" Y="150" X="190" ExtendedHeight="1000" IsVisible="False"
                                Background="{StaticResource Primary200}" Foreground="{StaticResource Primary600}" />
 
-        <Border Grid.Row="1" Height="630" Width="250" CornerRadius="125,125,0,0" VerticalAlignment="Bottom"
+        <Border Height="630" Width="250" CornerRadius="125,125,0,0" VerticalAlignment="Bottom"
                 Background="{StaticResource FrameColor}" Margin="{StaticResource NegativeEdgeGap}">
             <PathIcon HorizontalAlignment="Center" VerticalAlignment="Top"
                       Data="{StaticResource WheelIcon}"
@@ -152,10 +154,12 @@
             -->
         </Border>
 
-        <StackPanel Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Bottom" Width="180" Margin="0,220">
+        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Bottom" Width="230" Margin="0,220" ZIndex="1">
 
-            <TextBlock HorizontalAlignment="Center" Classes="TitleText" x:Name="GameTitle" />
-            <components:Button x:Name="PlayButton"
+            <TextBlock TextAlignment="Center" TextWrapping="Wrap" Classes="TitleText" x:Name="GameTitle" />
+            <TextBlock TextAlignment="Center" TextWrapping="Wrap" Classes="BodyText"
+                       x:Name="BackendTitle" Margin="0,6,0,0" />
+            <components:Button x:Name="PlayButton" MinWidth="180" MaxWidth="230" HorizontalAlignment="Center"
                                IsEnabled="True"
                                Variant="Primary"
                                Text="Play" PointerEntered="PlayButton_OnPointerEntered"
@@ -179,11 +183,12 @@
                                ToolTip.ShowDelay="50"  -->
         </StackPanel>
         
-        <components:WheelTrail Grid.Row="1" HorizontalAlignment="Right" VerticalAlignment="Bottom" x:Name="HomeTrail4"
+        <components:WheelTrail HorizontalAlignment="Right" VerticalAlignment="Bottom" x:Name="HomeTrail4"
                                Width="137" Angle="-35" X="-160" ExtendedHeight="1000" IsVisible="False"
                                Background="{StaticResource Primary400}" Foreground="{StaticResource Primary700}" />
-        <components:WheelTrail Grid.Row="1" HorizontalAlignment="Right" VerticalAlignment="Bottom" x:Name="HomeTrail5"
+        <components:WheelTrail HorizontalAlignment="Right" VerticalAlignment="Bottom" x:Name="HomeTrail5"
                                Width="137" Angle="-35" X="40" Y="30" ExtendedHeight="1000" IsVisible="False"
                                Background="{StaticResource Primary600}" Foreground="{StaticResource Primary800}" />
+        </Grid>
     </Grid>
 </UserControl>

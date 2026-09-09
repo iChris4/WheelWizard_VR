@@ -1,4 +1,4 @@
-﻿using System.Reflection;
+using System.Reflection;
 using WheelWizard.Services;
 
 namespace WheelWizard.Branding;
@@ -19,8 +19,8 @@ public class BrandingSingletonService : IBrandingSingletonService
     public Branding Branding { get; } =
         new()
         {
-            DisplayName = "Wheel Wizard",
-            Identifier = "WheelWizard",
+            DisplayName = "WheelWizard VR",
+            Identifier = "WheelWizardVR",
             Version = string.Join('.', Assembly.GetExecutingAssembly().GetName().Version?.ToString().Split('.')[..3] ?? ["0.0.0"]),
 
             RepositoryUrl = new(Endpoints.WhWzGithubUrl),

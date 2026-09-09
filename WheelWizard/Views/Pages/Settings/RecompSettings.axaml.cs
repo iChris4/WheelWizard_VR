@@ -1,8 +1,10 @@
 using Avalonia.Controls;
 using Avalonia.Interactivity;
+using Avalonia.Threading;
 using WheelWizard.Recomp;
 using WheelWizard.Services;
 using WheelWizard.Settings;
+using WheelWizard.Settings.Types;
 using WheelWizard.Shared.DependencyInjection;
 using WheelWizard.Shared.MessageTranslations;
 using WheelWizard.Views.Popups.Generic;
@@ -43,9 +45,42 @@ public partial class RecompSettings : UserControlBase
         GraphicsApiDropdown.SelectionChanged += GraphicsApi_OnChanged;
         ShowFps.IsCheckedChanged += ShowFps_OnChanged;
         PreventStutters.IsCheckedChanged += PreventStutters_OnChanged;
+        VrEnabled.IsCheckedChanged += (_, _) => SaveVrSetting(SettingsService.RECOMP_VR_ENABLED, VrEnabled.IsChecked == true);
+        VrHideDriver.IsCheckedChanged += (_, _) => SaveVrSetting(SettingsService.RECOMP_VR_HIDE_DRIVER, VrHideDriver.IsChecked == true);
+        VrMirrorDropdown.SelectionChanged += (_, _) => SaveVrChoice(SettingsService.RECOMP_VR_MIRROR_VIEW, VrMirrorDropdown, MirrorValues);
+        VrCameraDropdown.SelectionChanged += (_, _) =>
+        {
+            if (VrCameraDropdown.SelectedIndex >= 0)
+                SaveVrSetting(SettingsService.RECOMP_VR_FIRST_PERSON, VrCameraDropdown.SelectedIndex == 1);
+        };
+        VrRotationDropdown.SelectionChanged += (_, _) =>
+            SaveVrChoice(SettingsService.RECOMP_VR_FIRST_PERSON_ROTATION, VrRotationDropdown, RotationValues);
+        VrRenderScale.ValueChanged += (_, _) =>
+        {
+            if (VrRenderScale.Value is { } value)
+                SaveVrSetting(SettingsService.RECOMP_VR_RENDER_SCALE, (double)value);
+        };
+        AttachedToVisualTree += (_, _) => RecompOperationCoordinator.Changed += RefreshOperationState;
+        DetachedFromVisualTree += (_, _) => RecompOperationCoordinator.Changed -= RefreshOperationState;
+        RefreshOperationState();
     }
 
     private bool IsInstalled => RecompInstallService is { IsInstalled: true };
+
+    private void RefreshOperationState() => Dispatcher.UIThread.Post(() => IsEnabled = !RecompOperationCoordinator.IsBusy);
+
+    private IDisposable? TryAcquireSharedData()
+    {
+        try
+        {
+            return RecompOperationCoordinator.Acquire();
+        }
+        catch (IOException)
+        {
+            _ = new MessageBoxWindow().SetTitleText("WiiCompiled is busy").SetInfoText(RecompOperationCoordinator.BusyMessage).ShowDialog();
+            return null;
+        }
+    }
 
     private void LoadSettings()
     {
@@ -66,6 +101,7 @@ public partial class RecompSettings : UserControlBase
                 _ = RefreshWiiCompiledVersionAsync();
 
             LoadVideoSettings();
+            LoadVrSettings();
 
             var sharingDolphinData = DolphinData is { IsSharingEnabled: true, SourceNandFolderPath: not null };
             ShareDolphinData.IsChecked = sharingDolphinData;
@@ -88,6 +124,59 @@ public partial class RecompSettings : UserControlBase
         if (!IsInstalled)
             return;
         WiiCompiledVersionText.Text = t("helper_text.installed_version", version ?? t("state.unknown"));
+    }
+
+    private static readonly string[] MirrorValues = ["normal", "both", "left", "right", "none"];
+    private static readonly string[] RotationValues = ["yaw", "yaw_pitch", "full"];
+
+    private void LoadVrSettings()
+    {
+        VrSection.IsVisible = RecompEnvironment?.Backend.Kind == RecompBackendKind.OpenXR;
+        VrSection.IsEnabled = IsInstalled;
+        if (!VrSection.IsVisible)
+            return;
+        VrEnabled.IsChecked = SettingsService.Get<bool>(SettingsService.RECOMP_VR_ENABLED);
+        VrHideDriver.IsChecked = SettingsService.Get<bool>(SettingsService.RECOMP_VR_HIDE_DRIVER);
+        VrMirrorDropdown.ItemsSource = new[] { "Normal game", "Both eyes", "Left eye", "Right eye", "Black screen" };
+        VrMirrorDropdown.SelectedIndex = Array.IndexOf(MirrorValues, SettingsService.Get<string>(SettingsService.RECOMP_VR_MIRROR_VIEW));
+        VrCameraDropdown.ItemsSource = new[] { "Chase camera", "First person" };
+        VrCameraDropdown.SelectedIndex = SettingsService.Get<bool>(SettingsService.RECOMP_VR_FIRST_PERSON) ? 1 : 0;
+        VrRotationDropdown.ItemsSource = new[] { "Turning only", "Turning + pitch", "Full rotation" };
+        VrRotationDropdown.SelectedIndex = Array.IndexOf(
+            RotationValues,
+            SettingsService.Get<string>(SettingsService.RECOMP_VR_FIRST_PERSON_ROTATION)
+        );
+        var scale = SettingsService.Get<double>(SettingsService.RECOMP_VR_RENDER_SCALE);
+        VrRenderScale.Value = double.IsFinite(scale) ? (decimal)Math.Clamp(scale, 0.25, 2.0) : 1m;
+        RefreshVrCameraControls();
+    }
+
+    private void RefreshVrCameraControls()
+    {
+        var firstPerson = VrCameraDropdown.SelectedIndex == 1;
+        VrRotationDropdown.IsEnabled = firstPerson;
+        VrHideDriver.IsEnabled = firstPerson;
+    }
+
+    private void SaveVrChoice(Setting setting, ComboBox dropdown, string[] values)
+    {
+        if (dropdown.SelectedIndex >= 0 && dropdown.SelectedIndex < values.Length)
+            SaveVrSetting(setting, values[dropdown.SelectedIndex]);
+    }
+
+    private void SaveVrSetting(Setting setting, object value)
+    {
+        if (_loading || RecompEnvironment?.Backend.Kind != RecompBackendKind.OpenXR || !IsInstalled)
+            return;
+        using var operation = TryAcquireSharedData();
+        if (operation is null)
+        {
+            RecompSettingsFile.ReloadSettings();
+            LoadSettings();
+            return;
+        }
+        SettingsService.Set(setting, value);
+        RefreshVrCameraControls();
     }
 
     #region WiiCompiled video settings
@@ -114,6 +203,7 @@ public partial class RecompSettings : UserControlBase
         // selection; it is replaced the moment the user picks a real one.
         var currentApi = SettingsService.Get<string>(SettingsService.RECOMP_GRAPHICS_API);
         GraphicsApiDropdown.SelectedIndex = RecompVideoConfig.OfferedGraphicsApis.ToList().IndexOf(currentApi);
+        GraphicsApiDropdown.IsEnabled = RecompEnvironment?.Backend.Kind != RecompBackendKind.OpenXR;
 
         ShowFps.IsChecked = SettingsService.Get<bool>(SettingsService.RECOMP_SHOW_FPS);
         PreventStutters.IsChecked = SettingsService.Get<bool>(SettingsService.RECOMP_PREVENT_STUTTERS);
@@ -181,6 +271,12 @@ public partial class RecompSettings : UserControlBase
     {
         if (_loading || DolphinData is null)
             return;
+        using var operation = TryAcquireSharedData();
+        if (operation is null)
+        {
+            LoadSettings();
+            return;
+        }
 
         if (ShareDolphinData.IsChecked != true)
         {
@@ -240,6 +336,9 @@ public partial class RecompSettings : UserControlBase
     private async void CloneDolphinData_OnClick(object? sender, RoutedEventArgs e)
     {
         if (DolphinData is null)
+            return;
+        using var operation = TryAcquireSharedData();
+        if (operation is null)
             return;
 
         var sourceNand = await Task.Run(() => DolphinData.SourceNandFolderPath);
@@ -326,9 +425,7 @@ public partial class RecompSettings : UserControlBase
         // Shared Dolphin data lives in Dolphin's own Wii folder and survives; a copied or private
         // NAND belongs to the recomp and is removed with it, which the user must know upfront.
         var extraText =
-            DolphinData is { IsSharingEnabled: true, SourceNandFolderPath: not null } ? t("question.recomp_uninstall.extra_shared")
-            : DolphinData is { CopyEnabled: true, NandFolderPath: not null } ? t("question.recomp_uninstall.extra_copy")
-            : t("question.recomp_uninstall.extra_private");
+            "Remove this backend's compiled installation and download cache? Saves, Miis, controller settings and Retro Rewind content will be kept.";
         var confirmed = await new YesNoWindow()
             .SetMainText(t("question.recomp_uninstall.title"))
             .SetExtraText(extraText)

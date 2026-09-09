@@ -8,7 +8,7 @@ namespace WheelWizard.Services.UrlProtocol;
 
 public static class UrlProtocolManager
 {
-    private const string ProtocolName = "wheelwizard";
+    private const string ProtocolName = "wheelwizardvr";
 
 #if WINDOWS
     private static void RegisterCustomScheme(string schemeName)
@@ -71,7 +71,7 @@ public static class UrlProtocolManager
     public static async Task ShowPopupForLaunchUrlAsync(string url)
     {
         // Remove the protocol prefix
-        var content = url.Replace("wheelwizard://", "").Trim().TrimEnd('/');
+        var content = url[(url.IndexOf("://", StringComparison.Ordinal) + 3)..].Trim().TrimEnd('/');
         var parts = content.Split(',');
         try
         {

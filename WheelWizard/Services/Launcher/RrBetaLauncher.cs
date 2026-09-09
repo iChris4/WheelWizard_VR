@@ -32,6 +32,7 @@ public class RrBetaLauncher : ILauncher
     {
         try
         {
+            using var operation = WheelWizard.Recomp.RecompOperationCoordinator.Acquire();
             // Check first so a blocked launch does not kill Dolphin or prepare patches.
             var preflightResult = await DolphinLaunchHelper.PreflightDolphinVersionAsync();
             if (preflightResult.IsFailure)
@@ -62,7 +63,9 @@ public class RrBetaLauncher : ILauncher
             var dolphinLaunchType = _settingsManager.Get<bool>(_settingsManager.LAUNCH_WITH_DOLPHIN) ? "" : "-b";
             var dolphinLaunchResult = await DolphinLaunchHelper.LaunchDolphin(
                 $"{dolphinLaunchType} -e {EnvHelper.QuotePath(Path.GetFullPath(RrLaunchJsonFilePath))} --config=Dolphin.Core.EnableCheats=False --config=Achievements.Achievements.Enabled=False",
-                versionPreflightResult: preflightResult
+                versionPreflightResult: preflightResult,
+                waitForExit: true,
+                operationAlreadyCoordinated: true
             );
             if (dolphinLaunchResult.IsFailure)
                 return dolphinLaunchResult.Error;
@@ -81,7 +84,12 @@ public class RrBetaLauncher : ILauncher
         try
         {
             progressWindow.Show();
+            using var operation = WheelWizard.Recomp.RecompOperationCoordinator.Acquire();
             return await _customDistributionSingletonService.RetroRewindBeta.InstallAsync(progressWindow);
+        }
+        catch (IOException ex)
+        {
+            return Fail(ex.Message);
         }
         finally
         {
@@ -95,7 +103,12 @@ public class RrBetaLauncher : ILauncher
         try
         {
             progressWindow.Show();
+            using var operation = WheelWizard.Recomp.RecompOperationCoordinator.Acquire();
             return await _customDistributionSingletonService.RetroRewindBeta.UpdateAsync(progressWindow);
+        }
+        catch (IOException ex)
+        {
+            return Fail(ex.Message);
         }
         finally
         {

@@ -6,6 +6,7 @@ using Avalonia.Media;
 using Avalonia.Threading;
 using Testably.Abstractions;
 using WheelWizard.Models.Enums;
+using WheelWizard.Recomp;
 using WheelWizard.Services.Launcher;
 using WheelWizard.Services.Launcher.Helpers;
 using WheelWizard.Settings;
@@ -93,7 +94,9 @@ public partial class HomePage : UserControlBase
         _trails = [HomeTrail1, HomeTrail2, HomeTrail3, HomeTrail4, HomeTrail5];
         RandomSystem.Random.Shared.Shuffle(_trails);
 
-        _launcherTypes.Add(LauncherProvider.GetActiveLauncher());
+        _launcherTypes.AddRange(LauncherProvider.GetLaunchers());
+        AttachedToVisualTree += (_, _) => RecompOperationCoordinator.Changed += RefreshOperationState;
+        DetachedFromVisualTree += (_, _) => RecompOperationCoordinator.Changed -= RefreshOperationState;
         if (SettingsService.IsRecompModeActive())
             DolphinButton.IsVisible = false;
         else
@@ -126,13 +129,24 @@ public partial class HomePage : UserControlBase
 
     private void UpdatePage()
     {
-        GameTitle.Text = CurrentLauncher.GameTitle == "Retro Rewind" && IsAprilFirst ? "Retro Beefbai" : CurrentLauncher.GameTitle;
+        var gameName = CurrentLauncher is RecompLauncher recomp ? recomp.GameName : CurrentLauncher.GameTitle;
+        GameTitle.Text = gameName == "Retro Rewind" && IsAprilFirst ? "Retro Beefbai" : gameName;
+        BackendTitle.Text = (CurrentLauncher as RecompLauncher)?.BackendName;
+        BackendTitle.IsVisible = CurrentLauncher is RecompLauncher;
         UpdateActionButton();
     }
 
     private async void DolphinButton_OnClick(object? sender, RoutedEventArgs e)
     {
-        await DolphinLaunchHelper.LaunchDolphin();
+        try
+        {
+            using var operation = RecompOperationCoordinator.Acquire();
+            await DolphinLaunchHelper.LaunchDolphin(waitForExit: true, operationAlreadyCoordinated: true);
+        }
+        catch (IOException ex)
+        {
+            MessageTranslationHelper.ShowMessage(Fail(ex.Message));
+        }
         DisableAllButtonsTemporarily();
     }
 
@@ -200,6 +214,13 @@ public partial class HomePage : UserControlBase
 
     private void GameModeDropdown_OnSelectionChanged(object? sender, SelectionChangedEventArgs e)
     {
+        if (GameModeDropdown.SelectedIndex < 0 || GameModeDropdown.SelectedIndex >= _launcherTypes.Count)
+            return;
+        if (RecompOperationCoordinator.IsBusy)
+        {
+            GameModeDropdown.SelectedIndex = _launcherIndex;
+            return;
+        }
         _launcherIndex = GameModeDropdown.SelectedIndex;
         UpdatePage();
     }
@@ -216,7 +237,7 @@ public partial class HomePage : UserControlBase
             if (launcherType.GameTitle == "Retro Rewind" && IsAprilFirst)
                 GameModeDropdown.Items.Add("Retro Beefbai");
             else
-                GameModeDropdown.Items.Add(launcherType.GameTitle);
+                GameModeDropdown.Items.Add(launcherType is RecompLauncher recomp ? recomp.GameName : launcherType.GameTitle);
         }
 
         GameModeDropdown.SelectedIndex = _launcherIndex;
@@ -224,9 +245,13 @@ public partial class HomePage : UserControlBase
 
     private async void UpdateActionButton()
     {
+        var launcher = CurrentLauncher;
         _status = WheelWizardStatus.Loading;
         SetButtonState(CurrentButtonState);
-        _status = await CurrentLauncher.GetCurrentStatus();
+        var status = await launcher.GetCurrentStatus();
+        if (!ReferenceEquals(launcher, CurrentLauncher))
+            return;
+        _status = status;
         SetButtonState(CurrentButtonState);
     }
 
@@ -249,16 +274,19 @@ public partial class HomePage : UserControlBase
     {
         PlayButton.Text = state.Text;
         PlayButton.Variant = state.Type;
-        PlayButton.IsEnabled = state.OnClick != null;
+        PlayButton.IsEnabled = state.OnClick != null && !RecompOperationCoordinator.IsBusy;
+        GameModeDropdown.IsEnabled = !RecompOperationCoordinator.IsBusy;
         if (Application.Current != null && Application.Current.FindResource(state.IconName) is Geometry geometry)
             PlayButton.IconData = geometry;
-        DolphinButton.IsEnabled = state.SubButtonsEnabled && SettingsService.PathsSetupCorrectly();
+        DolphinButton.IsEnabled = state.SubButtonsEnabled && SettingsService.PathsSetupCorrectly() && !RecompOperationCoordinator.IsBusy;
 
         if (_status == WheelWizardStatus.Ready)
             PlayEntranceAnimation();
     }
 
     #region WheelTrail Animations
+    private void RefreshOperationState() => Dispatcher.UIThread.Post(() => SetButtonState(CurrentButtonState));
+
     // --------------------------
     // IMPORTANT
     // --------------------------

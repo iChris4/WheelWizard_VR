@@ -10,6 +10,19 @@ public static class MiiChannelLaunchHelper
 
     public static async Task LaunchMiiChannel()
     {
+        try
+        {
+            using var operation = WheelWizard.Recomp.RecompOperationCoordinator.Acquire();
+            await LaunchMiiChannelCore();
+        }
+        catch (IOException ex)
+        {
+            new MessageBoxWindow().SetTitleText("Mii Channel unavailable").SetInfoText(ex.Message).Show();
+        }
+    }
+
+    private static async Task LaunchMiiChannelCore()
+    {
         // Check first so a blocked launch does not enable the virtual Wii Remote.
         var preflightResult = await DolphinLaunchHelper.PreflightDolphinVersionAsync();
         if (preflightResult.IsFailure)
@@ -42,7 +55,9 @@ public static class MiiChannelLaunchHelper
         if (miiChannelExists)
             await DolphinLaunchHelper.LaunchDolphin(
                 $"-b {EnvHelper.QuotePath(Path.GetFullPath(MiiChannelPath))}",
-                versionPreflightResult: preflightResult
+                versionPreflightResult: preflightResult,
+                waitForExit: true,
+                operationAlreadyCoordinated: true
             );
     }
 }

@@ -140,7 +140,7 @@
                                 Spacing="3"
                                 HorizontalAlignment="Left"
                                 VerticalAlignment="Center">
-                        <components1:FormFieldLabel Text="{loc:T option.enable_recomp}" />
+                        <components1:FormFieldLabel Text="Enable WiiCompiled (beta)" />
                         <SelectableTextBlock Classes="TinyText"
                                    Text="{loc:T helper_text.enable_recomp}"
                                    TextAlignment="Left"
@@ -155,6 +155,17 @@
                 </Grid>
             </Border>
 
+            <Border Classes="SettingsBlockStyle SettingsRowStyle SettingsRowSingle" x:Name="RecompVrBorder">
+                <Grid ColumnDefinitions="*,Auto" MinHeight="40">
+                    <StackPanel Grid.Column="0" Margin="0,0,16,0" Spacing="3">
+                        <components1:FormFieldLabel Text="Enable WiiCompiled OpenXR VR (beta)" />
+                        <SelectableTextBlock Classes="TinyText" TextWrapping="Wrap"
+                            Text="Uses your OpenXR headset. Shares saves and Miis with WiiCompiled; graphics settings remain separate." />
+                    </StackPanel>
+                    <CheckBox Grid.Column="1" x:Name="EnableRecompVR" Classes="SwitchDark"
+                        IsChecked="False" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                </Grid>
+            </Border>
             <Border Classes="SettingsBottomSpacer" />
         </StackPanel>
     </Grid>

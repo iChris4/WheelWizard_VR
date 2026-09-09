@@ -11,10 +11,20 @@ namespace WheelWizard.Services.Launcher;
 public interface ILauncherProvider
 {
     ILauncher GetActiveLauncher();
+    IReadOnlyList<ILauncher> GetLaunchers() => [GetActiveLauncher()];
 }
 
 public class LauncherProvider(ISettingsManager settings, IServiceProvider serviceProvider) : ILauncherProvider
 {
+    public IReadOnlyList<ILauncher> GetLaunchers() =>
+        settings.IsRecompModeActive()
+            ?
+            [
+                serviceProvider.GetRequiredService<RecompLauncher>().WithGame(RecompGame.RetroRewind),
+                serviceProvider.GetRequiredService<RecompLauncher>().WithGame(RecompGame.Base),
+            ]
+            : [GetActiveLauncher()];
+
     public ILauncher GetActiveLauncher() =>
         settings.IsRecompModeActive()
             ? serviceProvider.GetRequiredService<RecompLauncher>()

@@ -2,6 +2,7 @@ using WheelWizard.CustomDistributions;
 using WheelWizard.Helpers;
 using WheelWizard.Models.Enums;
 using WheelWizard.Mods;
+using WheelWizard.Recomp;
 using WheelWizard.Services.Launcher.Helpers;
 using WheelWizard.Services.WiiManagement;
 using WheelWizard.Settings;
@@ -33,6 +34,8 @@ public class RrLauncher : ILauncher
         try
         {
             //case SHOULD be impossible since launch button should be disabled
+            using var operation = RecompOperationCoordinator.Acquire();
+            RetroRewindContentTransaction.Recover(new Testably.Abstractions.RealFileSystem(), PathManager.RiivolutionWhWzFolderPath);
             if (!File.Exists(PathManager.GameFilePath))
                 return Fail(t("message_warning.not_find_game.extra"));
 
@@ -63,7 +66,9 @@ public class RrLauncher : ILauncher
             var dolphinLaunchType = _settingsManager.Get<bool>(_settingsManager.LAUNCH_WITH_DOLPHIN) ? "" : "-b";
             var dolphinLaunchResult = await DolphinLaunchHelper.LaunchDolphin(
                 $"{dolphinLaunchType} -e {EnvHelper.QuotePath(Path.GetFullPath(RrLaunchJsonFilePath))} --config=Dolphin.Core.EnableCheats=False --config=Achievements.Achievements.Enabled=False",
-                versionPreflightResult: preflightResult
+                versionPreflightResult: preflightResult,
+                waitForExit: true,
+                operationAlreadyCoordinated: true
             );
             if (dolphinLaunchResult.IsFailure)
                 return dolphinLaunchResult.Error;
@@ -82,7 +87,12 @@ public class RrLauncher : ILauncher
         try
         {
             progressWindow.Show();
+            using var operation = RecompOperationCoordinator.Acquire();
             return await _customDistributionSingletonService.RetroRewind.InstallAsync(progressWindow);
+        }
+        catch (IOException ex)
+        {
+            return Fail(ex.Message);
         }
         finally
         {
@@ -96,7 +106,12 @@ public class RrLauncher : ILauncher
         try
         {
             progressWindow.Show();
+            using var operation = RecompOperationCoordinator.Acquire();
             return await _customDistributionSingletonService.RetroRewind.UpdateAsync(progressWindow);
+        }
+        catch (IOException ex)
+        {
+            return Fail(ex.Message);
         }
         finally
         {

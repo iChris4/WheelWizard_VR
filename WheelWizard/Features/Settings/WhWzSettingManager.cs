@@ -59,7 +59,7 @@ public class WhWzSettingManager(ILogger<WhWzSettingManager> logger, IFileSystem 
                 if (!string.IsNullOrWhiteSpace(directoryPath) && !fileSystem.Directory.Exists(directoryPath))
                     fileSystem.Directory.CreateDirectory(directoryPath);
 
-                fileSystem.File.WriteAllText(configPath, jsonString);
+                WheelWizard.Recomp.RecompConfig.WriteAtomic(fileSystem, configPath, jsonString);
             }
             catch (Exception ex)
             {
@@ -87,7 +87,26 @@ public class WhWzSettingManager(ILogger<WhWzSettingManager> logger, IFileSystem 
             var configPath = PathManager.WheelWizardConfigFilePath;
             try
             {
-                jsonString = fileSystem.File.Exists(configPath) ? fileSystem.File.ReadAllText(configPath) : null;
+                if (!fileSystem.File.Exists(configPath))
+                {
+                    var legacy = PathManager.LegacyWheelWizardConfigFilePath;
+                    fileSystem.Directory.CreateDirectory(PathManager.WheelWizardAppdataPath);
+                    try
+                    {
+                        if (fileSystem.File.Exists(legacy))
+                            fileSystem.File.Copy(legacy, configPath, overwrite: false);
+                        else
+                        {
+                            using var created = fileSystem.FileStream.New(configPath, FileMode.CreateNew, FileAccess.Write, FileShare.Read);
+                            created.Write("{}"u8);
+                        }
+                    }
+                    catch (IOException) when (fileSystem.File.Exists(configPath))
+                    {
+                        // Another launcher completed the one-time import first; read its result.
+                    }
+                }
+                jsonString = fileSystem.File.ReadAllText(configPath);
             }
             catch (Exception ex)
             {
