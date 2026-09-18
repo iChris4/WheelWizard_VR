@@ -144,6 +144,10 @@ public static class RecompConfig
         if (ReadLiteral(fs, vrConfig, "vr", "enabled") is null)
             Set(fs, vrConfig, "vr", "enabled", "true");
         Set(fs, vrConfig, "vr", "required", "false");
-        Set(fs, vrConfig, "video", "graphics_api", "\"d3d12\"");
+
+        // OpenXR only starts on D3D12 here, so a VR launch takes it. With OpenXR turned off this is
+        // an ordinary desktop installation, and the API the player chose stands.
+        if (ReadLiteral(fs, vrConfig, "vr", "enabled") != "false")
+            Set(fs, vrConfig, "video", "graphics_api", "\"d3d12\"");
     }
 }

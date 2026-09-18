@@ -1,7 +1,9 @@
-using Avalonia.Controls;
+﻿using Avalonia.Controls;
 using Avalonia.Interactivity;
+using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using WheelWizard.Recomp;
+using WheelWizard.Recomp.Domain;
 using WheelWizard.Services;
 using WheelWizard.Settings;
 using WheelWizard.Settings.Types;
@@ -45,7 +47,11 @@ public partial class RecompSettings : UserControlBase
         GraphicsApiDropdown.SelectionChanged += GraphicsApi_OnChanged;
         ShowFps.IsCheckedChanged += ShowFps_OnChanged;
         PreventStutters.IsCheckedChanged += PreventStutters_OnChanged;
-        VrEnabled.IsCheckedChanged += (_, _) => SaveVrSetting(SettingsService.RECOMP_VR_ENABLED, VrEnabled.IsChecked == true);
+        VrEnabled.IsCheckedChanged += (_, _) =>
+        {
+            SaveVrSetting(SettingsService.RECOMP_VR_ENABLED, VrEnabled.IsChecked == true);
+            RefreshGraphicsApiAvailability();
+        };
         VrHideDriver.IsCheckedChanged += (_, _) => SaveVrSetting(SettingsService.RECOMP_VR_HIDE_DRIVER, VrHideDriver.IsChecked == true);
         VrMirrorDropdown.SelectionChanged += (_, _) => SaveVrChoice(SettingsService.RECOMP_VR_MIRROR_VIEW, VrMirrorDropdown, MirrorValues);
         VrCameraDropdown.SelectionChanged += (_, _) =>
@@ -55,10 +61,11 @@ public partial class RecompSettings : UserControlBase
         };
         VrRotationDropdown.SelectionChanged += (_, _) =>
             SaveVrChoice(SettingsService.RECOMP_VR_FIRST_PERSON_ROTATION, VrRotationDropdown, RotationValues);
-        VrRenderScale.ValueChanged += (_, _) =>
+        VrRenderScaleDropdown.SelectionChanged += (_, _) =>
         {
-            if (VrRenderScale.Value is { } value)
-                SaveVrSetting(SettingsService.RECOMP_VR_RENDER_SCALE, (double)value);
+            var index = VrRenderScaleDropdown.SelectedIndex;
+            if (index >= 0 && index < _renderScales.Count)
+                SaveVrSetting(SettingsService.RECOMP_VR_RENDER_SCALE, _renderScales[index]);
         };
         AttachedToVisualTree += (_, _) => RecompOperationCoordinator.Changed += RefreshOperationState;
         DetachedFromVisualTree += (_, _) => RecompOperationCoordinator.Changed -= RefreshOperationState;
@@ -100,8 +107,9 @@ public partial class RecompSettings : UserControlBase
             if (installed)
                 _ = RefreshWiiCompiledVersionAsync();
 
-            LoadVideoSettings();
+            // VR first: whether OpenXR is on decides whether the graphics API can be chosen.
             LoadVrSettings();
+            LoadVideoSettings();
 
             var sharingDolphinData = DolphinData is { IsSharingEnabled: true, SourceNandFolderPath: not null };
             ShareDolphinData.IsChecked = sharingDolphinData;
@@ -126,6 +134,10 @@ public partial class RecompSettings : UserControlBase
         WiiCompiledVersionText.Text = t("helper_text.installed_version", version ?? t("state.unknown"));
     }
 
+    // The scales the render-scale list currently offers, which is the fixed set plus whatever the
+    // installation already holds when that is not one of them.
+    private IReadOnlyList<double> _renderScales = RecompVideoConfig.RenderScales;
+
     private static readonly string[] MirrorValues = ["normal", "both", "left", "right", "none"];
     private static readonly string[] RotationValues = ["yaw", "yaw_pitch", "full"];
 
@@ -146,8 +158,12 @@ public partial class RecompSettings : UserControlBase
             RotationValues,
             SettingsService.Get<string>(SettingsService.RECOMP_VR_FIRST_PERSON_ROTATION)
         );
+        // A scale set outside WheelWizard (the in-game panel takes any number) joins the list rather
+        // than being shown as the nearest offered one, so the row never misreports what the game uses.
         var scale = SettingsService.Get<double>(SettingsService.RECOMP_VR_RENDER_SCALE);
-        VrRenderScale.Value = double.IsFinite(scale) ? (decimal)Math.Clamp(scale, 0.25, 2.0) : 1m;
+        _renderScales = RecompVideoConfig.RenderScalesIncluding(scale);
+        VrRenderScaleDropdown.ItemsSource = _renderScales.Select(RecompVideoConfig.DescribeRenderScale).ToList();
+        VrRenderScaleDropdown.SelectedIndex = RecompVideoConfig.FindClosestRenderScaleIndex(_renderScales, scale);
         RefreshVrCameraControls();
     }
 
@@ -203,10 +219,25 @@ public partial class RecompSettings : UserControlBase
         // selection; it is replaced the moment the user picks a real one.
         var currentApi = SettingsService.Get<string>(SettingsService.RECOMP_GRAPHICS_API);
         GraphicsApiDropdown.SelectedIndex = RecompVideoConfig.OfferedGraphicsApis.ToList().IndexOf(currentApi);
-        GraphicsApiDropdown.IsEnabled = RecompEnvironment?.Backend.Kind != RecompBackendKind.OpenXR;
+        RefreshGraphicsApiAvailability();
 
         ShowFps.IsChecked = SettingsService.Get<bool>(SettingsService.RECOMP_SHOW_FPS);
         PreventStutters.IsChecked = SettingsService.Get<bool>(SettingsService.RECOMP_PREVENT_STUTTERS);
+    }
+
+    /// <summary>
+    /// A VR installation may pick its graphics API for desktop play, but not while OpenXR is on:
+    /// the headset path needs DirectX 12 on Windows, and the runtime refuses anything else. That is
+    /// shown rather than hidden, so the row says what the game will actually use.
+    /// </summary>
+    private void RefreshGraphicsApiAvailability()
+    {
+        var vrBackend = RecompEnvironment?.Backend.Kind == RecompBackendKind.OpenXR;
+        var vrOn = vrBackend && VrEnabled.IsChecked == true;
+        GraphicsApiVrNote.IsVisible = vrBackend;
+        GraphicsApiDropdown.IsEnabled = !vrOn;
+        if (vrOn)
+            GraphicsApiDropdown.SelectedIndex = RecompVideoConfig.OfferedGraphicsApis.ToList().IndexOf("d3d12");
     }
 
     /// <summary>

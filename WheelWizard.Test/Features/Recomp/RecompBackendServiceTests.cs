@@ -19,6 +19,8 @@ public sealed class RecompBackendServiceTests : IDisposable
     private readonly List<string> _commands = [];
     private string _reportedIdentity = RecompBackend.VrProductId;
     private string _retroStatus = "current";
+    private bool _questBuildSupported = true;
+    private string? _questPackagePath;
 
     public RecompBackendServiceTests() => SettingsTestUtils.InitializeSettingsRuntime(Path.GetFullPath("VrServiceTests/Dolphin"));
 
@@ -96,9 +98,41 @@ public sealed class RecompBackendServiceTests : IDisposable
                                 productId = _reportedIdentity,
                                 version = "0.2.32",
                                 openxrD3D12 = true,
+                                questBuild = _questBuildSupported,
                             }
                         )
                     );
+                else if (command.StartsWith("--build-quest"))
+                {
+                    var outputPath = Path.Combine(PathManager.WheelWizardAppdataPath, "MarioKartWii.wcgame");
+                    Write(outputPath, "synthetic package");
+                    output?.Invoke(
+                        """{"type":"progress","stage":"quest-build","message":"Compiling the game for Quest...","percent":60}"""
+                    );
+                    output?.Invoke(
+                        JsonSerializer.Serialize(
+                            new
+                            {
+                                type = "quest-package",
+                                path = _questPackagePath ?? outputPath,
+                                kitFingerprint = "kit",
+                                includesGameFiles = command.Contains("--include-game-files"),
+                                sizeBytes = 17,
+                            }
+                        )
+                    );
+                    output?.Invoke(
+                        JsonSerializer.Serialize(
+                            new
+                            {
+                                type = "result",
+                                success = true,
+                                version = "0.2.32",
+                                installDir = install,
+                            }
+                        )
+                    );
+                }
                 else if (command.StartsWith("--check-products"))
                     output?.Invoke(
                         JsonSerializer.Serialize(
@@ -177,6 +211,85 @@ public sealed class RecompBackendServiceTests : IDisposable
         service.SelectGame(RecompGame.RetroRewind);
         Assert.False((await service.ReconcileForLaunchAsync()).IsSuccess); // mock does not complete repair
         Assert.Contains(_commands, command => command.StartsWith("--repair-products"));
+    }
+
+    [Fact]
+    public async Task QuestBuildReportsThePackageTheVrHostWrote()
+    {
+        using var service = Create(RecompBackend.OpenXR);
+        var apk = Path.Combine(PathManager.WheelWizardAppdataPath, "quest.apk");
+        Write(apk, "synthetic apk");
+        var output = Path.Combine(PathManager.WheelWizardAppdataPath, "MarioKartWii.wcgame");
+        var reported = new List<int>();
+        service.SelectGame(RecompGame.Base);
+
+        var result = await service.BuildForQuestAsync(
+            apk,
+            output,
+            includeGameFiles: true,
+            progress: new SynchronousProgress(update => reported.Add(update.Percent))
+        );
+
+        Assert.True(result.IsSuccess, result.IsFailure ? result.Error.Message : null);
+        Assert.True(result.Value.IncludesGameFiles);
+        Assert.Contains(60, reported);
+        Assert.Equal(100, reported.Last());
+        Assert.Contains(_commands, command => command.StartsWith("--build-quest") && command.Contains("--include-game-files"));
+
+        // The headset plays whichever game WheelWizard is set to, and nothing else.
+        Assert.Contains(_commands, command => command.StartsWith("--build-quest") && command.Contains("--quest-product base"));
+    }
+
+    [Fact]
+    public async Task QuestBuildSendsTheSelectedGameAndItsPack()
+    {
+        using var service = Create(RecompBackend.OpenXR);
+        var apk = Path.Combine(PathManager.WheelWizardAppdataPath, "quest.apk");
+        Write(apk, "synthetic apk");
+        var output = Path.Combine(PathManager.WheelWizardAppdataPath, "MarioKartWii.wcgame");
+        service.SelectGame(RecompGame.RetroRewind);
+
+        var result = await service.BuildForQuestAsync(apk, output, includeGameFiles: false, includeModContent: true);
+
+        Assert.True(result.IsSuccess, result.IsFailure ? result.Error.Message : null);
+        var command = _commands.Single(candidate => candidate.StartsWith("--build-quest"));
+        Assert.Contains("--quest-product retro_rewind", command);
+        Assert.Contains("--include-mod-content", command);
+        Assert.Contains(Path.Combine("Content", "RetroRewind6"), command);
+    }
+
+    [Fact]
+    public async Task QuestBuildRejectsAPackageForAnotherPath()
+    {
+        using var service = Create(RecompBackend.OpenXR);
+        var apk = Path.Combine(PathManager.WheelWizardAppdataPath, "quest.apk");
+        Write(apk, "synthetic apk");
+        _questPackagePath = Path.Combine(PathManager.WheelWizardAppdataPath, "Other.wcgame");
+
+        var result = await service.BuildForQuestAsync(apk, Path.Combine(PathManager.WheelWizardAppdataPath, "MarioKartWii.wcgame"), false);
+
+        Assert.True(result.IsFailure);
+    }
+
+    [Theory]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    public async Task QuestBuildNeedsAVrHostThatSupportsIt(bool vr, bool supported)
+    {
+        using var service = Create(vr ? RecompBackend.OpenXR : RecompBackend.Normal);
+        _questBuildSupported = supported;
+        var apk = Path.Combine(PathManager.WheelWizardAppdataPath, "quest.apk");
+        Write(apk, "synthetic apk");
+
+        var result = await service.BuildForQuestAsync(apk, Path.Combine(PathManager.WheelWizardAppdataPath, "MarioKartWii.wcgame"), false);
+
+        Assert.True(result.IsFailure);
+        Assert.DoesNotContain(_commands, command => command.StartsWith("--build-quest"));
+    }
+
+    private sealed class SynchronousProgress(Action<RecompInstallProgress> handler) : IProgress<RecompInstallProgress>
+    {
+        public void Report(RecompInstallProgress value) => handler(value);
     }
 
     [Theory]

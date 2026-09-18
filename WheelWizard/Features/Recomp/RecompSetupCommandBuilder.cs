@@ -106,6 +106,57 @@ public static class RecompSetupCommandBuilder
     }
 
     /// <summary>
+    /// Builds the arguments that compile the installation's translated game for the Meta Quest app whose APK
+    /// the user chose, and package it at <paramref name="outputFilePath"/>. Game files are opt-in because
+    /// they make the package several gigabytes larger.
+    /// </summary>
+    public static string BuildQuestArguments(
+        string installFolderPath,
+        string questApkPath,
+        string outputFilePath,
+        bool includeGameFiles,
+        RecompGame game = RecompGame.Base,
+        string? modContentFolderPath = null
+    )
+    {
+        if (string.IsNullOrWhiteSpace(installFolderPath))
+            throw new ArgumentException("An install directory is required.", nameof(installFolderPath));
+        if (string.IsNullOrWhiteSpace(questApkPath))
+            throw new ArgumentException("The Quest app's APK is required.", nameof(questApkPath));
+        if (string.IsNullOrWhiteSpace(outputFilePath))
+            throw new ArgumentException("An output file is required.", nameof(outputFilePath));
+        if (!string.IsNullOrWhiteSpace(modContentFolderPath) && game != RecompGame.RetroRewind)
+            throw new ArgumentException("Only Retro Rewind carries mod content.", nameof(modContentFolderPath));
+
+        var arguments = new List<string>
+        {
+            "--build-quest",
+            "--install-dir",
+            Quote(installFolderPath),
+            "--quest-apk",
+            Quote(questApkPath),
+            "--output",
+            Quote(outputFilePath),
+            "--quest-product",
+            game == RecompGame.RetroRewind ? "retro_rewind" : "base",
+        };
+        if (includeGameFiles)
+            arguments.Add("--include-game-files");
+
+        // The headset has no way of its own to fetch the Retro Rewind pack, so the game file can
+        // carry the copy this installation already keeps.
+        if (!string.IsNullOrWhiteSpace(modContentFolderPath))
+        {
+            arguments.Add("--retro-dir");
+            arguments.Add(Quote(modContentFolderPath));
+            arguments.Add("--include-mod-content");
+        }
+
+        arguments.Add("--progress-json");
+        return string.Join(' ', arguments);
+    }
+
+    /// <summary>
     /// Builds the arguments that make the setup executable print its own semantic version.
     /// </summary>
     public static string BuildVersionArguments() => "--version";

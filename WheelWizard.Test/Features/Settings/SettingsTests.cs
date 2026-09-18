@@ -77,6 +77,9 @@ public class SettingsManagerTests
 #pragma warning disable CS0618
         SettingsRuntime.Initialize(manager);
 #pragma warning restore CS0618
+        // This build starts on its own VR backend, which owns its installation and needs no Dolphin;
+        // the Dolphin-only paths are only required by the Dolphin frontend.
+        manager.Set(manager.ENABLE_RECOMP_VR, false, skipSave: true);
 
         var result = manager.ValidateCorePathSettings();
 
@@ -85,6 +88,26 @@ public class SettingsManagerTests
         Assert.Contains(result.Value.Issues, issue => issue.Code == SettingsValidationCode.InvalidUserFolderPath);
         Assert.Contains(result.Value.Issues, issue => issue.Code == SettingsValidationCode.InvalidDolphinLocation);
         Assert.Contains(result.Value.Issues, issue => issue.Code == SettingsValidationCode.InvalidGameLocation);
+    }
+
+    [Fact]
+    public void VrBackendIsTheDefaultFrontendAndNeedsNoDolphinPaths()
+    {
+        var manager = CreateManager(new RealFileSystem(), out _, out _, out _);
+#pragma warning disable CS0618
+        SettingsRuntime.Initialize(manager);
+#pragma warning restore CS0618
+
+        Assert.True(manager.Get<bool>(manager.ENABLE_RECOMP_VR));
+        Assert.False(manager.Get<bool>(manager.ENABLE_RECOMP));
+        if (!OperatingSystem.IsWindows())
+            return; // The recomp is Windows-only, so elsewhere the Dolphin frontend still applies.
+
+        Assert.True(manager.IsRecompModeActive());
+        var result = manager.ValidateCorePathSettings();
+        Assert.True(result.IsSuccess);
+        Assert.DoesNotContain(result.Value.Issues, issue => issue.Code == SettingsValidationCode.InvalidDolphinLocation);
+        Assert.DoesNotContain(result.Value.Issues, issue => issue.Code == SettingsValidationCode.InvalidUserFolderPath);
     }
 
     [Fact]

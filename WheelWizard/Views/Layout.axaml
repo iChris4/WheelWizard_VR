@@ -135,6 +135,9 @@
             <patterns:SidebarRadioButton IconData="{StaticResource Code}"
                                            PageType="{x:Type pages:TestingPage}"
                                            Text="Testing Mode" x:Name="TestingButton" IsVisible="False" />
+            <patterns:SidebarRadioButton IconData="{StaticResource FileExport}" IsVisible="False"
+                                           PageType="{x:Type pages:QuestBuildPage}"
+                                           Text="Build for Quest" x:Name="QuestBuildButton" />
             <patterns:SidebarRadioButton IconData="{StaticResource Sink}" IsVisible="False"
                                            PageType="{x:Type pages:KitchenSinkPage}"
                                            Text="Kitchen Sink" x:Name="KitchenSinkButton" />

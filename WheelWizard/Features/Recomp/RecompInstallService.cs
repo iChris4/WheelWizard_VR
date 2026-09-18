@@ -79,6 +79,27 @@ public interface IRecompInstallService : IDisposable
     /// imported Wii data, and the canonical Retro Rewind content remain available for reinstall.
     /// </summary>
     Task<OperationResult> UninstallAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Compiles this VR installation's translated game for the Meta Quest app whose APK the user chose, and
+    /// writes the <c>.wcgame</c> package the headset installs with Import from computer. The installation's
+    /// products are only read; the setup host caches the Android compiler it downloads beside them.
+    /// </summary>
+    Task<OperationResult<RecompQuestPackageEvent>> BuildForQuestAsync(
+        string questApkPath,
+        string outputFilePath,
+        bool includeGameFiles,
+        bool includeModContent = false,
+        IProgress<RecompInstallProgress>? progress = null,
+        CancellationToken cancellationToken = default
+    );
+
+    /// <summary>
+    /// Whether the installed setup host declares <c>--build-quest</c>. It only asks the host what it
+    /// is, so a page can say upfront that an older installation cannot build for the Quest instead of
+    /// letting the player choose files for a build that is refused.
+    /// </summary>
+    Task<bool> SupportsQuestBuildAsync(CancellationToken cancellationToken = default);
 }
 
 /// <inheritdoc />
@@ -113,6 +134,9 @@ public sealed class RecompInstallService : IRecompInstallService
     // installation root. The name is part of the v1 contract; the digest inside it is not, so the
     // installation is probed by pattern rather than by recomputing the backend's own path.
     private const string OperationLockSearchPattern = ".mkwc-operation-*.lock";
+
+    private const string QuestBuildUnsupportedMessage =
+        "This WiiCompiled VR installation cannot build for Meta Quest yet. Update WiiCompiled, then try again.";
 
     private const string RetroWfcUnavailableMessage =
         "The Retro WFC servers are not responding, so WiiCompiled cannot set up online play right now. Try again later, or install without online play.";
@@ -606,6 +630,144 @@ public sealed class RecompInstallService : IRecompInstallService
             },
             errorMessage: "Could not remove the WiiCompiled installation."
         );
+    }
+
+    public async Task<OperationResult<RecompQuestPackageEvent>> BuildForQuestAsync(
+        string questApkPath,
+        string outputFilePath,
+        bool includeGameFiles,
+        bool includeModContent = false,
+        IProgress<RecompInstallProgress>? progress = null,
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (!await _operationGate.WaitAsync(0, cancellationToken))
+            return Fail(OperationAlreadyRunningMessage);
+
+        try
+        {
+            return await BuildForQuestCoreAsync(
+                questApkPath,
+                outputFilePath,
+                includeGameFiles,
+                includeModContent,
+                progress,
+                cancellationToken
+            );
+        }
+        finally
+        {
+            _operationGate.Release();
+        }
+    }
+
+    private async Task<OperationResult<RecompQuestPackageEvent>> BuildForQuestCoreAsync(
+        string questApkPath,
+        string outputFilePath,
+        bool includeGameFiles,
+        bool includeModContent,
+        IProgress<RecompInstallProgress>? progress,
+        CancellationToken cancellationToken
+    )
+    {
+        // The Quest runtime is the VR runtime, so only the VR installation's translation can feed it.
+        if (Backend.Kind != RecompBackendKind.OpenXR)
+            return Fail("Building for Meta Quest needs the WiiCompiled VR installation.");
+        if (!fileSystem.File.Exists(environment.InstalledSetupFilePath))
+            return Fail("WiiCompiled is not installed yet.");
+
+        var state = ReadCurrentInstallState();
+        if (state is null)
+            return Fail("WiiCompiled requires a current install-state.json for its fixed installation path.");
+        if (!await SetupMatchesVersionAsync(environment.InstalledSetupFilePath, state.SetupVersion, cancellationToken))
+            return Fail("The installed WiiCompiled host does not match its current install state.");
+        if (!await SetupSupportsQuestBuildAsync(cancellationToken))
+            return Fail(QuestBuildUnsupportedMessage);
+        if (!fileSystem.File.Exists(questApkPath))
+            return Fail("The Quest app (APK) was not found.");
+
+        // The headset plays the game WheelWizard is set to, and Retro Rewind can travel with the
+        // pack this installation already keeps.
+        var modContent = includeModContent ? environment.RetroRewindFolderPath : null;
+        if (includeModContent && string.IsNullOrWhiteSpace(modContent))
+            return Fail("Retro Rewind is not installed here, so its pack cannot travel with the game.");
+        var arguments = RecompSetupCommandBuilder.BuildQuestArguments(
+            environment.InstallFolderPath,
+            questApkPath,
+            outputFilePath,
+            includeGameFiles,
+            _game,
+            modContent
+        );
+        logger.LogInformation("Building WiiCompiled for Meta Quest: {Arguments}", arguments);
+
+        var resultHolder = new EventHolder<RecompSetupResultEvent>();
+        var packageHolder = new EventHolder<RecompQuestPackageEvent>();
+        var runResult = await processRunner.RunAsync(
+            environment.InstalledSetupFilePath,
+            arguments,
+            workingDirectory: null,
+            line =>
+            {
+                switch (RecompSetupOutputParser.Parse(line))
+                {
+                    case RecompSetupProgressEvent progressEvent:
+                        Report(
+                            progress,
+                            string.IsNullOrWhiteSpace(progressEvent.Message) ? progressEvent.Stage : progressEvent.Message,
+                            progressEvent.Percent
+                        );
+                        break;
+                    case RecompQuestPackageEvent packageEvent:
+                        packageHolder.Value = packageEvent;
+                        break;
+                    case RecompSetupResultEvent resultEvent:
+                        resultHolder.Value = resultEvent;
+                        break;
+                }
+            },
+            cancellationToken
+        );
+
+        if (runResult.IsFailure)
+            return runResult.Error;
+
+        var setupResult = resultHolder.Value;
+        if (setupResult is { Success: false })
+            return Fail(string.IsNullOrWhiteSpace(setupResult.Error) ? "Building the game for Meta Quest failed." : setupResult.Error);
+        if (runResult.Value != 0)
+            return Fail(IsInstallationBusy() ? InstallationBusyMessage : $"The Quest build exited with code {runResult.Value}.");
+        if (setupResult is null || resultHolder.Count != 1)
+            return Fail("The Quest build did not report exactly one terminal result.");
+
+        // The package line is the only statement of what was written; it must name the file that was asked for.
+        var package = packageHolder.Value;
+        if (
+            package is null
+            || packageHolder.Count != 1
+            || !PathsMatch(package.Path, outputFilePath)
+            || !fileSystem.File.Exists(outputFilePath)
+        )
+            return Fail("The Quest build finished without reporting the game package it was asked to write.");
+
+        Report(progress, t("progress.recomp_finished"), 100);
+        return Ok(package);
+    }
+
+    public async Task<bool> SupportsQuestBuildAsync(CancellationToken cancellationToken = default) =>
+        Backend.Kind == RecompBackendKind.OpenXR && IsInstalled && await SetupSupportsQuestBuildAsync(cancellationToken);
+
+    private async Task<bool> SetupSupportsQuestBuildAsync(CancellationToken cancellationToken)
+    {
+        var supported = false;
+        var info = await processRunner.RunAsync(
+            environment.InstalledSetupFilePath,
+            "--info-json",
+            workingDirectory: null,
+            line => supported |= RecompSetupIdentity.SupportsQuestBuild(line),
+            cancellationToken
+        );
+        return info.IsSuccess && info.Value == 0 && supported;
     }
 
     private void DeleteFolderIfPresent(string folderPath)

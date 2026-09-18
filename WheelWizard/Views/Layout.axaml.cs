@@ -103,7 +103,7 @@ public partial class Layout : BaseWindow, IRepeatedTaskListener
         ModManagerService.PropertyChanged += ModManager_PropertyChanged;
         _ = ReloadModsAndShowErrorsAsync();
         KitchenSinkButton.IsVisible = DevelopmentMode.IsEnabled;
-        UpdateOtherSectionVisibility();
+        UpdateQuestBuildButtonVisibility();
     }
 
     protected override void OnLoaded(RoutedEventArgs e)
@@ -174,6 +174,9 @@ public partial class Layout : BaseWindow, IRepeatedTaskListener
 
         if (setting == SettingsService.TESTING_MODE_ENABLED)
             UpdateTestingButtonVisibility();
+
+        if (setting == SettingsService.ENABLE_RECOMP_VR || setting == SettingsService.ENABLE_RECOMP)
+            UpdateQuestBuildButtonVisibility();
     }
 
     private void ClampSavedWindowScaleToCurrentScreen()
@@ -364,9 +367,19 @@ public partial class Layout : BaseWindow, IRepeatedTaskListener
         UpdateOtherSectionVisibility();
     }
 
+    // Only the VR backend's installation can build the Quest app's game, so the page it builds from
+    // is only offered while that backend is the chosen one.
+    private void UpdateQuestBuildButtonVisibility()
+    {
+        QuestBuildButton.IsVisible = OperatingSystem.IsWindows() && SettingsService.Get<bool>(SettingsService.ENABLE_RECOMP_VR);
+        if (!QuestBuildButton.IsVisible && ContentArea.Content is QuestBuildPage)
+            NavigateToPage(new HomePage());
+        UpdateOtherSectionVisibility();
+    }
+
     private void UpdateOtherSectionVisibility()
     {
-        OtherSectionText.IsVisible = TestingButton.IsVisible || KitchenSinkButton.IsVisible;
+        OtherSectionText.IsVisible = TestingButton.IsVisible || QuestBuildButton.IsVisible || KitchenSinkButton.IsVisible;
     }
 
     public void HideDevelopmentFeatures()

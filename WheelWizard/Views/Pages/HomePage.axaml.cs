@@ -101,7 +101,7 @@ public partial class HomePage : UserControlBase
             DolphinButton.IsVisible = false;
         else
             ApplyDolphinTrailColors();
-        PopulateGameModeDropdown();
+        BuildGameSelector();
         UpdatePage();
     }
 
@@ -212,35 +212,64 @@ public partial class HomePage : UserControlBase
         DisableAllButtonsTemporarily();
     }
 
-    private void GameModeDropdown_OnSelectionChanged(object? sender, SelectionChangedEventArgs e)
+    private void GameSegment_OnChecked(object? sender, RoutedEventArgs e)
     {
-        if (GameModeDropdown.SelectedIndex < 0 || GameModeDropdown.SelectedIndex >= _launcherTypes.Count)
+        if (sender is not RadioButton { Tag: int index } segment || index < 0 || index >= _launcherTypes.Count)
             return;
+        if (index == _launcherIndex)
+            return;
+
+        // A running game or install owns the installation, so the switch waits rather than pointing
+        // Play at a game whose state cannot be read right now.
         if (RecompOperationCoordinator.IsBusy)
         {
-            GameModeDropdown.SelectedIndex = _launcherIndex;
+            SelectGameSegment(_launcherIndex);
             return;
         }
-        _launcherIndex = GameModeDropdown.SelectedIndex;
+
+        _launcherIndex = index;
         UpdatePage();
     }
 
-    private void PopulateGameModeDropdown()
+    /// <summary>
+    /// Home's game switch: the segmented pill the Quest launcher shows above the title, with one
+    /// segment per launcher. A single launcher needs no switch, so it is not shown then.
+    /// </summary>
+    private void BuildGameSelector()
     {
-        // If there is only 1 option, we don't want to confuse the player with that option
-        GameModeOption.IsVisible = _launcherTypes.Count > 1;
-        if (!GameModeOption.IsVisible)
+        GameSelector.IsVisible = _launcherTypes.Count > 1;
+        if (!GameSelector.IsVisible)
             return;
 
-        foreach (var launcherType in _launcherTypes)
+        for (var index = 0; index < _launcherTypes.Count; index++)
         {
-            if (launcherType.GameTitle == "Retro Rewind" && IsAprilFirst)
-                GameModeDropdown.Items.Add("Retro Beefbai");
-            else
-                GameModeDropdown.Items.Add(launcherType is RecompLauncher recomp ? recomp.GameName : launcherType.GameTitle);
+            var launcher = _launcherTypes[index];
+            var name = launcher is RecompLauncher recomp ? recomp.GameName : launcher.GameTitle;
+            var segment = new RadioButton
+            {
+                Content = launcher.GameTitle == "Retro Rewind" && IsAprilFirst ? "Retro Beefbai" : name,
+                Classes = { "GameSegment" },
+                GroupName = "HomeGameSelector",
+                Tag = index,
+            };
+            segment.IsCheckedChanged += (sender, args) =>
+            {
+                if (sender is RadioButton { IsChecked: true })
+                    GameSegment_OnChecked(sender, args);
+            };
+            GameSelectorSegments.Children.Add(segment);
         }
 
-        GameModeDropdown.SelectedIndex = _launcherIndex;
+        SelectGameSegment(_launcherIndex);
+    }
+
+    private void SelectGameSegment(int index)
+    {
+        for (var i = 0; i < GameSelectorSegments.Children.Count; i++)
+        {
+            if (GameSelectorSegments.Children[i] is RadioButton segment)
+                segment.IsChecked = i == index;
+        }
     }
 
     private async void UpdateActionButton()
@@ -275,7 +304,7 @@ public partial class HomePage : UserControlBase
         PlayButton.Text = state.Text;
         PlayButton.Variant = state.Type;
         PlayButton.IsEnabled = state.OnClick != null && !RecompOperationCoordinator.IsBusy;
-        GameModeDropdown.IsEnabled = !RecompOperationCoordinator.IsBusy;
+        GameSelector.IsEnabled = !RecompOperationCoordinator.IsBusy;
         if (Application.Current != null && Application.Current.FindResource(state.IconName) is Geometry geometry)
             PlayButton.IconData = geometry;
         DolphinButton.IsEnabled = state.SubButtonsEnabled && SettingsService.PathsSetupCorrectly() && !RecompOperationCoordinator.IsBusy;

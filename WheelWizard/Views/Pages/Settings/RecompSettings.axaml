@@ -1,4 +1,4 @@
-<UserControl xmlns="https://github.com/avaloniaui"
+﻿<UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -70,6 +70,11 @@
                                        Text="{loc:T helper_text.recomp_graphics_api}"
                                        TextAlignment="Left"
                                        TextWrapping="Wrap" />
+                            <TextBlock x:Name="GraphicsApiVrNote"
+                                       Classes="TinyText"
+                                       IsVisible="False"
+                                       TextWrapping="Wrap"
+                                       Text="OpenXR needs DirectX 12 on Windows, so this is fixed while Enable OpenXR is on. Turn OpenXR off to pick an API for desktop play." />
                         </StackPanel>
                         <ComboBox Grid.Column="1"
                                   x:Name="GraphicsApiDropdown"
@@ -175,7 +180,7 @@
                             <TextBlock Classes="BodyText" TextWrapping="Wrap" Text="Headset render scale" />
                             <TextBlock Classes="TinyText" TextWrapping="Wrap" Text="Higher values improve clarity and increase GPU load. Applies on the next launch." />
                         </StackPanel>
-                        <NumericUpDown Grid.Column="1" x:Name="VrRenderScale" Width="120" Minimum="0.25" Maximum="2" Increment="0.05" FormatString="0.00"
+                        <ComboBox Grid.Column="1" x:Name="VrRenderScaleDropdown" Width="150"
                                    HorizontalAlignment="Right" VerticalAlignment="Center" />
                     </Grid>
                 </Border>

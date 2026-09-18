@@ -38,6 +38,7 @@ public static class RecompSetupOutputParser
                 "progress" => ParseProgress(root),
                 "result" => ParseResult(root),
                 "products" => ParseProducts(root),
+                "quest-package" => ParseQuestPackage(root),
                 _ => null,
             };
         }
@@ -45,6 +46,22 @@ public static class RecompSetupOutputParser
         {
             return null;
         }
+    }
+
+    private static RecompQuestPackageEvent? ParseQuestPackage(JsonElement root)
+    {
+        if (
+            !TryGetRequiredString(root, "path", out var path)
+            || string.IsNullOrWhiteSpace(path)
+            || !TryGetRequiredString(root, "kitFingerprint", out var kitFingerprint)
+            || !TryGetRequiredBoolean(root, "includesGameFiles", out var includesGameFiles)
+            || !root.TryGetProperty("sizeBytes", out var sizeElement)
+            || sizeElement.ValueKind != JsonValueKind.Number
+            || !sizeElement.TryGetInt64(out var sizeBytes)
+        )
+            return null;
+
+        return new(path, kitFingerprint!, includesGameFiles, sizeBytes);
     }
 
     private static RecompSetupProgressEvent ParseProgress(JsonElement root) =>

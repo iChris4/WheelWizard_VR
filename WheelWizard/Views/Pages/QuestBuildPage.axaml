@@ -1,0 +1,132 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:components="clr-namespace:WheelWizard.Views.Components"
+             mc:Ignorable="d" d:DesignWidth="444" d:DesignHeight="716"
+             x:Class="WheelWizard.Views.Pages.QuestBuildPage">
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="{StaticResource TopRowSize}" />
+            <RowDefinition />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <Grid Grid.Row="0">
+            <Border Background="{StaticResource BackgroundLineColor}" Height="1" HorizontalAlignment="Stretch"
+                    VerticalAlignment="Bottom" />
+            <TextBlock Text="Build for Quest" Classes="PageTitleText"
+                       VerticalAlignment="Bottom" HorizontalAlignment="Left" />
+        </Grid>
+
+        <ScrollViewer Grid.Row="1" Margin="10,0" HorizontalScrollBarVisibility="Disabled"
+                      VerticalScrollBarVisibility="Auto">
+            <StackPanel Margin="0,14,0,0">
+                <Grid Margin="0,0,0,10" MinHeight="40" x:Name="UnavailableBanner" IsVisible="False">
+                    <Border Background="{StaticResource Warning600}"
+                            CornerRadius="9999"
+                            Effect="blur(150)"
+                            Opacity="0.1" />
+                    <Border Background="{StaticResource Neutral700}"
+                            BorderBrush="{StaticResource Warning500}"
+                            BorderThickness="1"
+                            CornerRadius="{StaticResource GlobalCornerRadius}">
+                        <Grid ColumnDefinitions="40,*">
+                            <PathIcon Data="{StaticResource WarningTip}"
+                                      Foreground="{StaticResource Warning500}"
+                                      Width="20" />
+                            <SelectableTextBlock Grid.Column="1"
+                                                 x:Name="UnavailableText"
+                                                 Margin="0,6,10,6"
+                                                 Classes="BodyText"
+                                                 TextWrapping="Wrap"
+                                                 VerticalAlignment="Center"
+                                                 Foreground="{StaticResource Neutral200}" />
+                        </Grid>
+                    </Border>
+                </Grid>
+
+                <TextBlock Classes="TinyText" TextWrapping="Wrap" Margin="2,0,2,10"
+                           Text="The WiiCompiled Quest app carries no game code. This builds the game for it from this installation, which was made from your own disc, and saves it as a .wcgame file you copy to the headset." />
+
+                <components:FormFieldLabel Text="Game" Margin="0,0,0,4" />
+                <StackPanel x:Name="GameSection" Spacing="4" Margin="0,0,0,7">
+                    <Border Classes="SettingsBlockStyle SettingsRowStyle SettingsRowSingle">
+                        <Grid ColumnDefinitions="*,Auto" MinHeight="40">
+                            <StackPanel Margin="0,0,12,0" Spacing="3" VerticalAlignment="Center">
+                                <TextBlock Classes="BodyText" TextWrapping="Wrap" Text="Which game" />
+                                <TextBlock Classes="TinyText" TextWrapping="Wrap"
+                                           Text="The app plays both, and keeps each game it is given." />
+                            </StackPanel>
+                            <ComboBox Grid.Column="1" x:Name="GameDropdown" Width="160"
+                                      HorizontalAlignment="Right" VerticalAlignment="Center" />
+                        </Grid>
+                    </Border>
+                </StackPanel>
+
+                <components:FormFieldLabel Text="Include" Margin="0,10,0,4" />
+                <StackPanel x:Name="IncludeSection" Spacing="4" Margin="0,0,0,7">
+                    <Border Classes="SettingsBlockStyle SettingsRowStyle SettingsRowTop">
+                        <Grid ColumnDefinitions="*,Auto" MinHeight="40">
+                            <StackPanel Margin="0,0,12,0" Spacing="3" VerticalAlignment="Center">
+                                <TextBlock Classes="BodyText" TextWrapping="Wrap" Text="The game files" />
+                                <TextBlock Classes="TinyText" TextWrapping="Wrap"
+                                           Text="Adds this installation's disc files, about 3 GB, so the headset needs nothing else. Leave them out if you already extracted your disc in the Quest app." />
+                            </StackPanel>
+                            <CheckBox Grid.Column="1" x:Name="IncludeGameFiles" Classes="SwitchDark"
+                                      HorizontalAlignment="Right" VerticalAlignment="Center" />
+                        </Grid>
+                    </Border>
+                    <Border Classes="SettingsBlockStyle SettingsRowStyle SettingsRowBottom">
+                        <Grid ColumnDefinitions="*,Auto" MinHeight="40">
+                            <StackPanel Margin="0,0,12,0" Spacing="3" VerticalAlignment="Center">
+                                <TextBlock Classes="BodyText" TextWrapping="Wrap" Text="The Retro Rewind pack" />
+                                <TextBlock Classes="TinyText" TextWrapping="Wrap"
+                                           Text="Retro Rewind needs its pack on the headset and cannot download it there. Adds about 2 GB." />
+                            </StackPanel>
+                            <CheckBox Grid.Column="1" x:Name="IncludeModContent" Classes="SwitchDark"
+                                      HorizontalAlignment="Right" VerticalAlignment="Center" />
+                        </Grid>
+                    </Border>
+                </StackPanel>
+
+                <components:FormFieldLabel Text="Quest app" Margin="0,10,0,4" />
+                <StackPanel x:Name="ApkSection" Spacing="4" Margin="0,0,0,7">
+                    <Border Classes="SettingsBlockStyle SettingsRowStyle SettingsRowSingle">
+                        <Grid ColumnDefinitions="*,Auto" MinHeight="40">
+                            <StackPanel Margin="0,0,12,0" Spacing="3" VerticalAlignment="Center">
+                                <TextBlock Classes="BodyText" TextWrapping="Wrap" Text="APK file" />
+                                <TextBlock Classes="TinyText" TextWrapping="Wrap" x:Name="ApkPathText"
+                                           Text="The app holds the game kit your game is built against, so it decides how the game is compiled." />
+                            </StackPanel>
+                            <components:Button Grid.Column="1"
+                                               x:Name="ChooseApkButton"
+                                               Variant="Default"
+                                               ButtonSize="Compact"
+                                               IconData="{StaticResource Folder}"
+                                               Text="Choose"
+                                               HorizontalAlignment="Right"
+                                               VerticalAlignment="Center"
+                                               Click="ChooseApk_OnClick" />
+                        </Grid>
+                    </Border>
+                </StackPanel>
+
+                <TextBlock Classes="TinyText" TextWrapping="Wrap" Margin="2,4,2,14"
+                           Text="The first build downloads Google's Android NDK compiler (about 830 MB), covered by the Android Software Development Kit License Agreement: https://developer.android.com/studio/terms" />
+            </StackPanel>
+        </ScrollViewer>
+
+        <Grid Grid.Row="2" Margin="10,10,10,0">
+            <components:Button x:Name="BuildButton"
+                               Variant="Primary"
+                               Text="Build the game"
+                               IconData="{StaticResource FileExport}"
+                               Click="Build_OnClick"
+                               Height="48"
+                               HorizontalAlignment="Stretch"
+                               FontSize="14" />
+        </Grid>
+    </Grid>
+</UserControl>

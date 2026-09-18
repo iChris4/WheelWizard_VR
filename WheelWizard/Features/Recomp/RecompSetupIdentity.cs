@@ -21,4 +21,18 @@ public static class RecompSetupIdentity
             return false;
         }
     }
+
+    /// <summary>Whether an <c>--info-json</c> line advertises <c>--build-quest</c>, which older setups lack.</summary>
+    public static bool SupportsQuestBuild(string json)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            return document.RootElement.TryGetProperty("questBuild", out var questBuild) && questBuild.ValueKind == JsonValueKind.True;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
 }

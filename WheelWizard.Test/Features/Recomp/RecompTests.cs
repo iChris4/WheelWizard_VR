@@ -62,6 +62,107 @@ public class RecompTests
     }
 
     [Fact]
+    public void RenderScaleList_KeepsWhateverTheInstallationAlreadyHolds()
+    {
+        // The offered scales are a short list, but the in-game panel takes any number, so a value it
+        // set has to join the list rather than be shown as the nearest one.
+        Assert.Equal(RecompVideoConfig.RenderScales, RecompVideoConfig.RenderScalesIncluding(1.0));
+        Assert.Equal(RecompVideoConfig.RenderScales, RecompVideoConfig.RenderScalesIncluding(double.NaN));
+        Assert.Equal(RecompVideoConfig.RenderScales, RecompVideoConfig.RenderScalesIncluding(4.0));
+
+        var withOwn = RecompVideoConfig.RenderScalesIncluding(0.85);
+        Assert.Equal(RecompVideoConfig.RenderScales.Count + 1, withOwn.Count);
+        Assert.Contains(0.85, withOwn);
+        Assert.Equal(withOwn.OrderBy(scale => scale), withOwn);
+        Assert.Equal(0.85, withOwn[RecompVideoConfig.FindClosestRenderScaleIndex(withOwn, 0.85)]);
+
+        // Picking from the plain list still lands on the nearest offered scale.
+        Assert.Equal(
+            0.75,
+            RecompVideoConfig.RenderScales[RecompVideoConfig.FindClosestRenderScaleIndex(RecompVideoConfig.RenderScales, 0.8)]
+        );
+        Assert.Equal("1.00x (default)", RecompVideoConfig.DescribeRenderScale(1.0));
+        Assert.Equal("0.25x", RecompVideoConfig.DescribeRenderScale(0.25));
+    }
+
+    [Fact]
+    public void QuestBuild_PassesGameFilesOnlyWhenAskedTo()
+    {
+        Assert.Equal(
+            "--build-quest --install-dir \"D:\\RecompVR\\Install\" --quest-apk \"D:\\Quest App.apk\" --output \"D:\\Out\\MarioKartWii.wcgame\" "
+                + "--quest-product base --include-game-files --progress-json",
+            RecompSetupCommandBuilder.BuildQuestArguments(@"D:\RecompVR\Install\", @"D:\Quest App.apk", @"D:\Out\MarioKartWii.wcgame", true)
+        );
+        Assert.DoesNotContain(
+            "--include-game-files",
+            RecompSetupCommandBuilder.BuildQuestArguments(@"D:\RecompVR\Install", @"D:\app.apk", @"D:\game.wcgame", false)
+        );
+    }
+
+    [Fact]
+    public void QuestBuild_NamesTheGameAndCarriesTheRetroRewindPack()
+    {
+        var retro = RecompSetupCommandBuilder.BuildQuestArguments(
+            @"D:\RecompVR\Install",
+            @"D:\app.apk",
+            @"D:\RetroRewind.wcgame",
+            includeGameFiles: false,
+            RecompGame.RetroRewind,
+            @"D:\Content\RetroRewind6"
+        );
+        Assert.Contains("--quest-product retro_rewind", retro);
+        Assert.Contains("--retro-dir \"D:\\Content\\RetroRewind6\" --include-mod-content", retro);
+
+        // The unmodded game has no pack to carry.
+        Assert.Throws<ArgumentException>(
+            () =>
+                RecompSetupCommandBuilder.BuildQuestArguments(
+                    @"D:\i",
+                    @"D:\a.apk",
+                    @"D:\g.wcgame",
+                    false,
+                    RecompGame.Base,
+                    @"D:\RetroRewind6"
+                )
+        );
+    }
+
+    [Fact]
+    public void QuestPackageLine_IsOnlyAnEventWhenComplete()
+    {
+        var package = Assert.IsType<RecompQuestPackageEvent>(
+            RecompSetupOutputParser.Parse(
+                """{"type":"quest-package","path":"D:\\Out\\MarioKartWii.wcgame","kitFingerprint":"28fb","includesGameFiles":true,"sizeBytes":2736026585}"""
+            )
+        );
+        Assert.Equal(@"D:\Out\MarioKartWii.wcgame", package.Path);
+        Assert.Equal("28fb", package.KitFingerprint);
+        Assert.True(package.IncludesGameFiles);
+        Assert.Equal(2736026585L, package.SizeBytes);
+
+        Assert.Null(
+            RecompSetupOutputParser.Parse("""{"type":"quest-package","kitFingerprint":"28fb","includesGameFiles":true,"sizeBytes":1}""")
+        );
+        Assert.Null(
+            RecompSetupOutputParser.Parse("""{"type":"quest-package","path":"D:\\a.wcgame","kitFingerprint":"28fb","sizeBytes":1}""")
+        );
+    }
+
+    [Fact]
+    public void QuestBuildCapability_IsReadFromInfoJson()
+    {
+        Assert.True(
+            RecompSetupIdentity.SupportsQuestBuild(
+                """{"productId":"wiicompiled-openxr-vr","version":"0.3.0","openxrD3D12":true,"questBuild":true}"""
+            )
+        );
+        Assert.False(
+            RecompSetupIdentity.SupportsQuestBuild("""{"productId":"wiicompiled-openxr-vr","version":"0.2.38","openxrD3D12":true}""")
+        );
+        Assert.False(RecompSetupIdentity.SupportsQuestBuild("0.3.0"));
+    }
+
+    [Fact]
     public void InstallState_ReadsThePayloadModeTheSetupHostWrites()
     {
         var state = System.Text.Json.JsonSerializer.Deserialize<RecompInstallState>(

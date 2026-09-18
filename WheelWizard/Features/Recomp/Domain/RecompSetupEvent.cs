@@ -19,6 +19,13 @@ public sealed record RecompSetupProgressEvent(string Stage, string Message, int 
 public sealed record RecompSetupResultEvent(bool Success, string? Version, string? InstallDir, string? Error) : RecompSetupEvent;
 
 /// <summary>
+/// <c>{"type":"quest-package","path":"...","kitFingerprint":"...","includesGameFiles":true,"sizeBytes":0}</c>
+/// Written by <c>--build-quest</c> just before its success result: the Meta Quest game package it built,
+/// which the Quest app installs with Import from computer. A line missing any field is not an event.
+/// </summary>
+public sealed record RecompQuestPackageEvent(string Path, string KitFingerprint, bool IncludesGameFiles, long SizeBytes) : RecompSetupEvent;
+
+/// <summary>
 /// The <c>{"type":"products",...}</c> line emitted by <c>--check-products</c>. It is the authoritative
 /// answer about whether the installed products still match their compile inputs and cached payload.
 /// </summary>

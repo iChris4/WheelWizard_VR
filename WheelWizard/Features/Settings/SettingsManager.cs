@@ -1,4 +1,4 @@
-using System.IO.Abstractions;
+﻿using System.IO.Abstractions;
 using System.Runtime.InteropServices;
 using WheelWizard.DolphinInstaller;
 using WheelWizard.Helpers;
@@ -44,12 +44,17 @@ public class SettingsManager : ISettingsManager
         // Register this first because the path validators use the active frontend mode when deciding
         // whether Dolphin-only locations may be left blank.
         ENABLE_RECOMP = RegisterWhWz("EnableRecomp", false);
-        ENABLE_RECOMP_VR = RegisterWhWz("EnableRecompVR", false);
+        // This build is the VR launcher, so its own backend is the one it starts on. Only Windows can
+        // run it (IsRecompModeActive checks that), and an explicit choice is saved and wins as usual.
+        ENABLE_RECOMP_VR = RegisterWhWz("EnableRecompVR", true);
         // Whether WiiCompiled directly shares Dolphin's live NAND. Disabled means private mode;
         // private mode uses the imported clone below when one exists, otherwise the runtime default.
         RECOMP_USE_DOLPHIN_DATA = RegisterWhWz("RecompUseDolphinData", false);
         // Whether private mode was initialized from the Wheel Wizard-owned Dolphin clone.
         RECOMP_COPY_DOLPHIN_NAND = RegisterWhWz("RecompCopyDolphinNand", false);
+        // The Quest app a Quest build compiles against: its APK carries the game kit. Remembered so
+        // the player chooses it once instead of for every build; a file that has gone reads as unset.
+        RECOMP_QUEST_APK = RegisterWhWz("RecompQuestApk", "");
         DOLPHIN_LOCATION = RegisterWhWz(
             "DolphinLocation",
             "",
@@ -234,6 +239,7 @@ public class SettingsManager : ISettingsManager
     public Setting ENABLE_RECOMP_VR { get; }
     public Setting RECOMP_USE_DOLPHIN_DATA { get; }
     public Setting RECOMP_COPY_DOLPHIN_NAND { get; }
+    public Setting RECOMP_QUEST_APK { get; }
     public Setting PREFERS_MODS_ROW_VIEW { get; }
     public Setting USE_PATCHES_SYSTEM { get; }
     public Setting FOCUSED_USER { get; }

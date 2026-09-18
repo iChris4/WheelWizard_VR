@@ -188,6 +188,22 @@ public sealed class RecompVrTests : IDisposable
     }
 
     [Fact]
+    public void VrPreparationOnlyForcesD3D12WhileOpenXrIsOn()
+    {
+        // OpenXR starts on D3D12 only, so a VR launch takes it whatever was chosen. With OpenXR off
+        // the installation is an ordinary desktop one, and the player's own API has to survive.
+        var vr = RecompBackend.OpenXR.Config(PathManager.WheelWizardAppdataPath);
+        Write(vr, "[vr]\nenabled = true\n[video]\ngraphics_api = \"vulkan\"\n");
+        RecompConfig.PrepareVr(_fs, PathManager.RecompConfigFilePath, vr);
+        Assert.Equal("d3d12", RecompConfig.ReadString(_fs, vr, "video", "graphics_api"));
+
+        RecompConfig.Set(_fs, vr, "vr", "enabled", "false");
+        RecompConfig.Set(_fs, vr, "video", "graphics_api", "\"vulkan\"");
+        RecompConfig.PrepareVr(_fs, PathManager.RecompConfigFilePath, vr);
+        Assert.Equal("vulkan", RecompConfig.ReadString(_fs, vr, "video", "graphics_api"));
+    }
+
+    [Fact]
     public void VrPreferencesPersistOnlyToSelectedBackendAndReloadAfterSwitch()
     {
         var selection = new RecompBackendSelection();

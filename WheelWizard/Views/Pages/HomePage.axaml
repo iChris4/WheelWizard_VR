@@ -50,6 +50,34 @@
             </Style.Animations>
         </Style>
 
+        <!-- Home's game switch, the same segmented pill the Quest launcher shows above the title. -->
+        <Style Selector="RadioButton.GameSegment">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="{StaticResource Neutral300}" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border Background="{TemplateBinding Background}" CornerRadius="999" Padding="12,5">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          Foreground="{TemplateBinding Foreground}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+        </Style>
+        <Style Selector="RadioButton.GameSegment:pointerover">
+            <Setter Property="Background" Value="{StaticResource Neutral800}" />
+            <Setter Property="Foreground" Value="{StaticResource Neutral100}" />
+        </Style>
+        <Style Selector="RadioButton.GameSegment:pressed">
+            <Setter Property="Background" Value="{StaticResource Neutral700}" />
+        </Style>
+        <Style Selector="RadioButton.GameSegment:checked">
+            <Setter Property="Background" Value="{StaticResource Primary400}" />
+            <Setter Property="Foreground" Value="{StaticResource Neutral950}" />
+        </Style>
+
         <Style Selector="components|WheelTrail.ActivateTrailFromHover">
             <Style.Animations>
                 <Animation Duration="0:0:0.6"
@@ -118,15 +146,6 @@
         <Border Grid.Row="2" Background="{StaticResource BackgroundLineColor}" Height="1" HorizontalAlignment="Stretch"
                 VerticalAlignment="Bottom" />
 
-        <StackPanel Grid.Row="1" Orientation="Horizontal" VerticalAlignment="Top" Margin="0,10" Spacing="12"
-                    HorizontalAlignment="Right"
-                    x:Name="GameModeOption">
-            <components:FormFieldLabel Text="Game mode:" VerticalAlignment="Center" />
-            <ComboBox x:Name="GameModeDropdown"
-                      SelectionChanged="GameModeDropdown_OnSelectionChanged" Width="170"
-                      VerticalAlignment="Top" />
-        </StackPanel>
-
         <Grid Grid.Row="2" ClipToBounds="True">
         <!-- These are invisible by default, they will be set to visible once the button is turned to green 
             This way we don't have to take in account whether or not an animation can play, since if it plays but it is not allowed, it will be invisible anyways -->
@@ -155,6 +174,13 @@
         </Border>
 
         <StackPanel HorizontalAlignment="Center" VerticalAlignment="Bottom" Width="230" Margin="0,220" ZIndex="1">
+
+            <Border x:Name="GameSelector" IsVisible="False"
+                    HorizontalAlignment="Center" Margin="0,0,0,10"
+                    BorderBrush="{StaticResource Neutral600}" BorderThickness="1"
+                    CornerRadius="999" Padding="3">
+                <StackPanel x:Name="GameSelectorSegments" Orientation="Horizontal" />
+            </Border>
 
             <TextBlock TextAlignment="Center" TextWrapping="Wrap" Classes="TitleText" x:Name="GameTitle" />
             <TextBlock TextAlignment="Center" TextWrapping="Wrap" Classes="BodyText"
