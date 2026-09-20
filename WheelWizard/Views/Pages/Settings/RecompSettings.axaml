@@ -74,7 +74,7 @@
                                        Classes="TinyText"
                                        IsVisible="False"
                                        TextWrapping="Wrap"
-                                       Text="OpenXR needs DirectX 12 on Windows, so this is fixed while Enable OpenXR is on. Turn OpenXR off to pick an API for desktop play." />
+                                       Text="DirectX 12 is the tested headset path. Vulkan also drives the headset, but only on a WiiCompiled build whose Dawn library supports it; on any other build VR startup fails and the game opens on the desktop." />
                         </StackPanel>
                         <ComboBox Grid.Column="1"
                                   x:Name="GraphicsApiDropdown"

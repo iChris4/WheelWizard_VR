@@ -145,9 +145,23 @@ public static class RecompConfig
             Set(fs, vrConfig, "vr", "enabled", "true");
         Set(fs, vrConfig, "vr", "required", "false");
 
-        // OpenXR only starts on D3D12 here, so a VR launch takes it. With OpenXR turned off this is
-        // an ordinary desktop installation, and the API the player chose stands.
+        // OpenXR drives the headset on either offered API, so a choice between them survives a VR
+        // launch. Anything else (auto, opengl, an absent or malformed key) would make the runtime
+        // refuse the headset and open on the desktop instead, so it is repaired to D3D12. With
+        // OpenXR turned off this is an ordinary desktop installation and the player's API stands.
         if (ReadLiteral(fs, vrConfig, "vr", "enabled") != "false")
-            Set(fs, vrConfig, "video", "graphics_api", "\"d3d12\"");
+        {
+            string? api = null;
+            try
+            {
+                api = ReadString(fs, vrConfig, "video", "graphics_api");
+            }
+            catch (InvalidDataException)
+            {
+                // Repaired below, exactly as an absent key is.
+            }
+            if (api is null || !RecompVideoConfig.OfferedGraphicsApis.Contains(api))
+                Set(fs, vrConfig, "video", "graphics_api", "\"d3d12\"");
+        }
     }
 }

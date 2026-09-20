@@ -226,17 +226,16 @@ public partial class RecompSettings : UserControlBase
     }
 
     /// <summary>
-    /// A VR installation may pick its graphics API for desktop play, but not while OpenXR is on:
-    /// the headset path needs DirectX 12 on Windows, and the runtime refuses anything else. That is
-    /// shown rather than hidden, so the row says what the game will actually use.
+    /// Both offered APIs drive the headset, so the choice stays open while OpenXR is on. Only a value
+    /// from outside that pair is refused, and a launch repairs it to DirectX 12; the row is preselected
+    /// so it says what the game will actually use. The note carries what the choice costs in VR.
     /// </summary>
     private void RefreshGraphicsApiAvailability()
     {
         var vrBackend = RecompEnvironment?.Backend.Kind == RecompBackendKind.OpenXR;
         var vrOn = vrBackend && VrEnabled.IsChecked == true;
-        GraphicsApiVrNote.IsVisible = vrBackend;
-        GraphicsApiDropdown.IsEnabled = !vrOn;
-        if (vrOn)
+        GraphicsApiVrNote.IsVisible = vrOn;
+        if (vrOn && GraphicsApiDropdown.SelectedIndex < 0)
             GraphicsApiDropdown.SelectedIndex = RecompVideoConfig.OfferedGraphicsApis.ToList().IndexOf("d3d12");
     }
 

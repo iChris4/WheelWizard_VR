@@ -188,19 +188,24 @@ public sealed class RecompVrTests : IDisposable
     }
 
     [Fact]
-    public void VrPreparationOnlyForcesD3D12WhileOpenXrIsOn()
+    public void VrPreparationKeepsAnOfferedApiAndRepairsAnyOther()
     {
-        // OpenXR starts on D3D12 only, so a VR launch takes it whatever was chosen. With OpenXR off
-        // the installation is an ordinary desktop one, and the player's own API has to survive.
+        // OpenXR drives the headset on either offered API, so a Vulkan choice survives a VR launch.
+        // Only a value the runtime would refuse is repaired, and with OpenXR off the installation is
+        // an ordinary desktop one where the player's own API always stands.
         var vr = RecompBackend.OpenXR.Config(PathManager.WheelWizardAppdataPath);
         Write(vr, "[vr]\nenabled = true\n[video]\ngraphics_api = \"vulkan\"\n");
+        RecompConfig.PrepareVr(_fs, PathManager.RecompConfigFilePath, vr);
+        Assert.Equal("vulkan", RecompConfig.ReadString(_fs, vr, "video", "graphics_api"));
+
+        RecompConfig.Set(_fs, vr, "video", "graphics_api", "\"auto\"");
         RecompConfig.PrepareVr(_fs, PathManager.RecompConfigFilePath, vr);
         Assert.Equal("d3d12", RecompConfig.ReadString(_fs, vr, "video", "graphics_api"));
 
         RecompConfig.Set(_fs, vr, "vr", "enabled", "false");
-        RecompConfig.Set(_fs, vr, "video", "graphics_api", "\"vulkan\"");
+        RecompConfig.Set(_fs, vr, "video", "graphics_api", "\"opengl\"");
         RecompConfig.PrepareVr(_fs, PathManager.RecompConfigFilePath, vr);
-        Assert.Equal("vulkan", RecompConfig.ReadString(_fs, vr, "video", "graphics_api"));
+        Assert.Equal("opengl", RecompConfig.ReadString(_fs, vr, "video", "graphics_api"));
     }
 
     [Fact]
