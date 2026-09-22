@@ -53,6 +53,8 @@ public partial class RecompSettings : UserControlBase
             RefreshGraphicsApiAvailability();
         };
         VrHideDriver.IsCheckedChanged += (_, _) => SaveVrSetting(SettingsService.RECOMP_VR_HIDE_DRIVER, VrHideDriver.IsChecked == true);
+        VrHandSteering.IsCheckedChanged += (_, _) =>
+            SaveVrSetting(SettingsService.RECOMP_VR_HAND_STEERING, VrHandSteering.IsChecked == true);
         VrMirrorDropdown.SelectionChanged += (_, _) => SaveVrChoice(SettingsService.RECOMP_VR_MIRROR_VIEW, VrMirrorDropdown, MirrorValues);
         VrCameraDropdown.SelectionChanged += (_, _) =>
         {
@@ -149,6 +151,7 @@ public partial class RecompSettings : UserControlBase
             return;
         VrEnabled.IsChecked = SettingsService.Get<bool>(SettingsService.RECOMP_VR_ENABLED);
         VrHideDriver.IsChecked = SettingsService.Get<bool>(SettingsService.RECOMP_VR_HIDE_DRIVER);
+        VrHandSteering.IsChecked = SettingsService.Get<bool>(SettingsService.RECOMP_VR_HAND_STEERING);
         VrMirrorDropdown.ItemsSource = new[] { "Normal game", "Both eyes", "Left eye", "Right eye", "Black screen" };
         VrMirrorDropdown.SelectedIndex = Array.IndexOf(MirrorValues, SettingsService.Get<string>(SettingsService.RECOMP_VR_MIRROR_VIEW));
         VrCameraDropdown.ItemsSource = new[] { "Chase camera", "First person" };
@@ -172,6 +175,7 @@ public partial class RecompSettings : UserControlBase
         var firstPerson = VrCameraDropdown.SelectedIndex == 1;
         VrRotationDropdown.IsEnabled = firstPerson;
         VrHideDriver.IsEnabled = firstPerson;
+        VrHandSteering.IsEnabled = firstPerson;
     }
 
     private void SaveVrChoice(Setting setting, ComboBox dropdown, string[] values)

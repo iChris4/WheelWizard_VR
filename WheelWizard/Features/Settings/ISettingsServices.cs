@@ -71,6 +71,7 @@ public interface ISettingsProperties
     Setting RECOMP_VR_FIRST_PERSON { get; }
     Setting RECOMP_VR_FIRST_PERSON_ROTATION { get; }
     Setting RECOMP_VR_HIDE_DRIVER { get; }
+    Setting RECOMP_VR_HAND_STEERING { get; }
     Setting RECOMP_VR_RENDER_SCALE { get; }
 }
 

@@ -76,6 +76,24 @@
                 </Grid>
             </Border>
 
+            <!-- VR HAND STEERING -->
+            <Border Classes="AboutBlockStyle" Margin="0,10,0,0">
+                <Grid ColumnDefinitions="60,*" MinHeight="38">
+                    <Path Data="M3,20 A17,17 0 1 1 37,20 A17,17 0 1 1 3,20 Z
+                                M16,20 A4,4 0 1 1 24,20 A4,4 0 1 1 16,20 Z
+                                M3,20 H16 M24,20 H37 M20,24 V37"
+                          Stroke="{StaticResource Primary300}" StrokeThickness="2"
+                          Stretch="Uniform" Width="34" Height="34" Margin="3,0,0,0"
+                          HorizontalAlignment="Left" VerticalAlignment="Center" />
+                    <Border Grid.Column="0" Classes="AboutBlockLineStyle" HorizontalAlignment="Right" />
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                        <components:FormFieldLabel Text="VR hand steering by heurazy" Margin="0,0,0,2" />
+                        <SelectableTextBlock Classes="TinyText"
+                                             Text="The turning cockpit wheel and hand steering come from heurazy's mario-kart-wii-VR-port." />
+                    </StackPanel>
+                </Grid>
+            </Border>
+
             <!-- ROBOTO FONTS-->
             <Border Classes="AboutBlockStyle" Margin="0,10,0,0">
                 <Grid ColumnDefinitions="60,*">

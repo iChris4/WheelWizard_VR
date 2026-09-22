@@ -229,6 +229,7 @@ public sealed class RecompVrTests : IDisposable
         settings.Set(settings.RECOMP_VR_FIRST_PERSON, true);
         settings.Set(settings.RECOMP_VR_FIRST_PERSON_ROTATION, "yaw_pitch");
         settings.Set(settings.RECOMP_VR_HIDE_DRIVER, false);
+        settings.Set(settings.RECOMP_VR_HAND_STEERING, true);
         settings.Set(settings.RECOMP_VR_RENDER_SCALE, 1.25);
         var saved = _fs.File.ReadAllText(vr);
         selection.Restore(true, false);
@@ -236,6 +237,7 @@ public sealed class RecompVrTests : IDisposable
         manager.ReloadSettings();
         Assert.Equal("normal", settings.Get<string>(settings.RECOMP_VR_MIRROR_VIEW));
         Assert.False(settings.Get<bool>(settings.RECOMP_VR_FIRST_PERSON));
+        Assert.False(settings.Get<bool>(settings.RECOMP_VR_HAND_STEERING));
         Assert.Equal(1.0, settings.Get<double>(settings.RECOMP_VR_RENDER_SCALE));
         Assert.Equal("[video]\ngraphics_api = \"vulkan\"\n", _fs.File.ReadAllText(selection.ConfigPath));
         selection.Restore(false, true);
@@ -245,8 +247,37 @@ public sealed class RecompVrTests : IDisposable
         Assert.True(settings.Get<bool>(settings.RECOMP_VR_FIRST_PERSON));
         Assert.Equal("yaw_pitch", settings.Get<string>(settings.RECOMP_VR_FIRST_PERSON_ROTATION));
         Assert.False(settings.Get<bool>(settings.RECOMP_VR_HIDE_DRIVER));
+        Assert.True(settings.Get<bool>(settings.RECOMP_VR_HAND_STEERING));
         Assert.Equal(1.25, settings.Get<double>(settings.RECOMP_VR_RENDER_SCALE));
         Assert.Equal(saved, _fs.File.ReadAllText(vr));
+        Assert.Contains("hand_steering = true", saved);
+    }
+
+    [Fact]
+    public void HandSteeringIsOffUnlessTheConfigurationSaysOtherwise()
+    {
+        var selection = new RecompBackendSelection();
+        selection.Restore(false, true);
+        var vr = selection.ConfigPath;
+        Write(vr, "[vr]\nenabled = true\n");
+        var manager = new RecompSettingManager(_fs, selection);
+        var settings = new SettingsManager(
+            Substitute.For<IWhWzSettingManager>(),
+            Substitute.For<IDolphinSettingManager>(),
+            manager,
+            _fs,
+            selection
+        );
+        manager.LoadSettings();
+        // The runtime's own default (kVrHandSteeringDefault) is off, and loading writes nothing back.
+        Assert.False(settings.Get<bool>(settings.RECOMP_VR_HAND_STEERING));
+        Assert.Equal("[vr]\nenabled = true\n", _fs.File.ReadAllText(vr));
+        Write(vr, "[vr]\nenabled = true\nhand_steering = true\n");
+        manager.ReloadSettings();
+        Assert.True(settings.Get<bool>(settings.RECOMP_VR_HAND_STEERING));
+        settings.Set(settings.RECOMP_VR_HAND_STEERING, false);
+        // Written with the platform's line endings.
+        Assert.Equal("[vr]\nenabled = true\nhand_steering = false\n", _fs.File.ReadAllText(vr).ReplaceLineEndings("\n"));
     }
 
     [Fact]
