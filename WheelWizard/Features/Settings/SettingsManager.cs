@@ -181,10 +181,11 @@ public class SettingsManager : ISettingsManager
         RECOMP_VR_ENABLED = RegisterRecomp(("vr", "enabled"), true);
         RECOMP_VR_MIRROR_VIEW = RegisterRecomp(("vr", "mirror_view"), "normal");
         RECOMP_VR_FIRST_PERSON = RegisterRecomp(("vr", "first_person"), false);
-        RECOMP_VR_FIRST_PERSON_ROTATION = RegisterRecomp(("vr", "first_person_rotation"), "yaw");
+        RECOMP_VR_FIRST_PERSON_ROTATION = RegisterRecomp(("vr", "first_person_rotation"), "yaw_pitch");
         RECOMP_VR_HIDE_DRIVER = RegisterRecomp(("vr", "first_person_hide_driver"), true);
-        // Hand steering (grab the cockpit's wheel with the VR controllers), by heurazy. Opt-in in game too.
-        RECOMP_VR_HAND_STEERING = RegisterRecomp(("vr", "hand_steering"), false);
+        // Hand steering (grab the cockpit's wheel with the VR controllers), by heurazy. On in game too:
+        // the stick keeps steering until a grip takes hold of the wheel.
+        RECOMP_VR_HAND_STEERING = RegisterRecomp(("vr", "hand_steering"), true);
         RECOMP_VR_RENDER_SCALE = RegisterRecomp(("vr", "render_scale"), 1.0);
         // The Wii data folder the runtime should use, written by RecompDolphinDataService after an
         // install and whenever the sharing choice changes. Empty/absent means the runtime's private NAND.
