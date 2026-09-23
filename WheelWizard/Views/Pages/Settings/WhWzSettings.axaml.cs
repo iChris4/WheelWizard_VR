@@ -22,6 +22,9 @@ public partial class WhWzSettings : UserControlBase
         public override string ToString() => DisplayName;
     }
 
+    // MD5 of the clean PAL (RMCP01) Mario Kart Wii disc as a plain .iso (Redump).
+    private const string CleanPalIsoMd5 = "E7B1FF1FABB0789482CE2CB0661D986E";
+
     private readonly bool _pageLoaded;
     private bool _editingScale;
     private bool _isMovingAppData;
@@ -111,6 +114,9 @@ public partial class WhWzSettings : UserControlBase
     private void RefreshLocalizedCodeText()
     {
         MarioKartHelperText.Text = t("helper_text.end_with_x") + " .iso/.gcm/.gcz/.ciso/.wbfs/.wia/.rvz";
+        // WiiCompiled only accepts the clean PAL disc; Dolphin plays every region.
+        if (SettingsService.IsRecompModeActive())
+            MarioKartHelperText.Text += "\n" + t("helper_text.clean_disc_md5", CleanPalIsoMd5);
         TranslationsPercentageText.Text = t("text.language_translated_by", t("value.language.z_translators"));
         TranslationsPercentageText.IsVisible = t("value.language.z_translators") != "-";
     }

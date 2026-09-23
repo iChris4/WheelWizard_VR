@@ -593,6 +593,7 @@ en:
     end_with_exe: "Path must end with .exe"
     enable_animations: "This enables the animations in the Wheel Wizard app"
     end_with_x: "Path can end with:"
+    clean_disc_md5: "WiiCompiled needs the clean PAL game: as a .iso file its MD5 hash is {$1}. Compressed images (.wbfs, .rvz...) have a different hash."
     wh_wz_language: "Changes the language used by Wheel Wizard, not the in-game language."
     optional: "Optional"
     must_set_paths: "You must set these 3 paths before you can start playing Retro Rewind"

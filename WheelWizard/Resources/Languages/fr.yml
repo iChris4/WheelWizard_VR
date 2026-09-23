@@ -437,6 +437,7 @@ fr:
     end_with_exe: "Le chemin doit se finir en .exe"
     enable_animations: "Ceci active les animations dans l'application Wheel Wizard"
     end_with_x: "Le chemin doit se finir avec:"
+    clean_disc_md5: "WiiCompiled a besoin du jeu PAL d'origine : en fichier .iso, son empreinte MD5 est {$1}. Les images compressées (.wbfs, .rvz...) ont une empreinte différente."
     optional: "Optionnel"
     must_set_paths: "Vous devez impérativement définir ces 3 chemins afin de jouer à Retro Rewind"
   category:
