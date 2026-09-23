@@ -1,6 +1,6 @@
 <Project>
     <PropertyGroup>
-        <Version>2.5.7</Version>
+        <Version>2.5.8</Version>
         <CSharpier_Check>false</CSharpier_Check>
         <Configurations>Debug;Release;Debug-Windows;Debug-Linux;Debug-macOS;Release-Windows;Release-Linux;Release-macOS</Configurations>
         <Platforms>AnyCPU</Platforms>
