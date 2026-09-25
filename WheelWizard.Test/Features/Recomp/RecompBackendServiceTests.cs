@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Testably.Abstractions.Testing;
@@ -16,11 +17,30 @@ public sealed class RecompBackendServiceTests : IDisposable
     private readonly MockFileSystem _fs = new();
     private readonly IRecompProcessRunner _runner = Substitute.For<IRecompProcessRunner>();
     private readonly IGitHubSingletonService _github = Substitute.For<IGitHubSingletonService>();
+    private readonly IRecompSetupDownloader _downloader = Substitute.For<IRecompSetupDownloader>();
     private readonly List<string> _commands = [];
     private string _reportedIdentity = RecompBackend.VrProductId;
     private string _retroStatus = "current";
     private bool _questBuildSupported = true;
     private string? _questPackagePath;
+    private byte[]? _downloadedBytes;
+
+    /// <summary>A stand-in for the Quest app: an APK is a zip, and the build reads the game kit inside it.</summary>
+    private static byte[] QuestAppBytes(bool withKit = true)
+    {
+        using var stream = new MemoryStream();
+        using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            using (var manifest = new StreamWriter(archive.CreateEntry("AndroidManifest.xml").Open()))
+                manifest.Write("synthetic");
+            if (withKit)
+            {
+                using var kit = new StreamWriter(archive.CreateEntry("assets/game_kit/kit.json").Open());
+                kit.Write("""{"fingerprint":"kit","products":{"base":{}}}""");
+            }
+        }
+        return stream.ToArray();
+    }
 
     public RecompBackendServiceTests() => SettingsTestUtils.InitializeSettingsRuntime(Path.GetFullPath("VrServiceTests/Dolphin"));
 
@@ -75,12 +95,39 @@ public sealed class RecompBackendServiceTests : IDisposable
                             new()
                             {
                                 TagName = "v0.2.32",
-                                Assets = [new() { Name = "WiiCompiled-Setup.exe", BrowserDownloadUrl = "https://example.invalid/setup" }],
+                                Assets =
+                                [
+                                    new() { Name = "WiiCompiled-Setup.exe", BrowserDownloadUrl = "https://example.invalid/setup" },
+                                    new() { Name = "WiiCompiledVR-Quest-0.4.0.apk", BrowserDownloadUrl = "https://example.invalid/app" },
+                                ],
+                            },
+                            new()
+                            {
+                                TagName = "v0.2.33",
+                                Assets =
+                                [
+                                    new() { Name = "WiiCompiled-Setup.exe", BrowserDownloadUrl = "https://example.invalid/newer-setup" },
+                                    new()
+                                    {
+                                        Name = "WiiCompiledVR-Quest-0.5.0.apk",
+                                        BrowserDownloadUrl = "https://example.invalid/newer-app",
+                                    },
+                                ],
                             },
                         }
                     )
                 )
             );
+        _downloader
+            .DownloadAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<IProgress<int>?>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var destination = call.ArgAt<string>(1);
+                _fs.Directory.CreateDirectory(_fs.Path.GetDirectoryName(destination)!);
+                _fs.File.WriteAllBytes(destination, _downloadedBytes ?? QuestAppBytes());
+                call.ArgAt<IProgress<int>?>(2)?.Report(100);
+                return Task.FromResult(Ok());
+            });
         _runner
             .RunAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<Action<string>?>(), Arg.Any<CancellationToken>())
             .Returns(call =>
@@ -152,7 +199,7 @@ public sealed class RecompBackendServiceTests : IDisposable
         return new(
             environment,
             _runner,
-            Substitute.For<IRecompSetupDownloader>(),
+            _downloader,
             Substitute.For<IRecompRetroWfcPayloadProbe>(),
             _github,
             _fs,
@@ -256,6 +303,99 @@ public sealed class RecompBackendServiceTests : IDisposable
         Assert.Contains("--quest-product retro_rewind", command);
         Assert.Contains("--include-mod-content", command);
         Assert.Contains(Path.Combine("Content", "RetroRewind6"), command);
+    }
+
+    private static string CacheFolder => Path.Combine(RecompBackend.OpenXR.Root(PathManager.WheelWizardAppdataPath), "Cache");
+
+    [Fact]
+    public async Task QuestAppComesFromTheInstalledReleaseAndIsDownloadedOnce()
+    {
+        using var service = Create(RecompBackend.OpenXR);
+
+        var found = await service.FindQuestAppAsync();
+        Assert.True(found.IsSuccess, found.IsFailure ? found.Error.Message : null);
+        // The installation is 0.2.32, so the newer release's app is not the one: its kit would not fit.
+        Assert.Equal("v0.2.32", found.Value.ReleaseTag);
+        Assert.Equal("0.4.0", found.Value.AppVersion);
+
+        var reported = new List<int>();
+        var first = await service.DownloadQuestAppAsync(found.Value, new SynchronousProgress(update => reported.Add(update.Percent)));
+        Assert.True(first.IsSuccess, first.IsFailure ? first.Error.Message : null);
+        Assert.Equal(CacheFolder, Path.GetDirectoryName(first.Value));
+        Assert.Equal("WiiCompiledVR-Quest-0.4.0.apk", Path.GetFileName(first.Value));
+        Assert.True(_fs.File.Exists(first.Value));
+        Assert.Contains(100, reported);
+
+        // The cached copy serves the next build, and a stale app of another release is dropped with it.
+        var stale = Path.Combine(CacheFolder, "WiiCompiledVR-Quest-0.3.0.apk");
+        Write(stale, "old app");
+        var second = await service.DownloadQuestAppAsync(found.Value);
+        Assert.True(second.IsSuccess);
+        Assert.Equal(first.Value, second.Value);
+        Assert.False(_fs.File.Exists(stale));
+        await _downloader
+            .Received(1)
+            .DownloadAsync(found.Value.DownloadUrl, first.Value, Arg.Any<IProgress<int>?>(), Arg.Any<CancellationToken>());
+
+        // The downloaded app is what the build compiles against.
+        var output = Path.Combine(PathManager.WheelWizardAppdataPath, "MarioKartWii.wcgame");
+        service.SelectGame(RecompGame.Base);
+        var build = await service.BuildForQuestAsync(first.Value, output, includeGameFiles: false);
+        Assert.True(build.IsSuccess, build.IsFailure ? build.Error.Message : null);
+        Assert.Contains(
+            _commands,
+            command => command.StartsWith("--build-quest") && command.Contains("--quest-apk \"" + first.Value + "\"")
+        );
+    }
+
+    [Fact]
+    public async Task QuestAppDownloadIsRefusedWhenItIsNotTheApp()
+    {
+        using var service = Create(RecompBackend.OpenXR);
+        var found = await service.FindQuestAppAsync();
+        Assert.True(found.IsSuccess);
+
+        // A zip without the game kit is not a WiiCompiled Quest app, and nothing of it is kept.
+        _downloadedBytes = QuestAppBytes(withKit: false);
+        var result = await service.DownloadQuestAppAsync(found.Value);
+        Assert.True(result.IsFailure);
+        Assert.False(_fs.File.Exists(Path.Combine(CacheFolder, "WiiCompiledVR-Quest-0.4.0.apk")));
+
+        // A file that is not the size GitHub lists is a truncated download.
+        _downloadedBytes = QuestAppBytes();
+        var truncated = await service.DownloadQuestAppAsync(found.Value with { SizeBytes = _downloadedBytes.Length + 1 });
+        Assert.True(truncated.IsFailure);
+        var whole = await service.DownloadQuestAppAsync(found.Value with { SizeBytes = _downloadedBytes.Length });
+        Assert.True(whole.IsSuccess, whole.IsFailure ? whole.Error.Message : null);
+    }
+
+    [Fact]
+    public async Task QuestAppNeedsAReleaseThatPublishesIt()
+    {
+        using var service = Create(RecompBackend.OpenXR);
+        _github
+            .GetReleasesAsync(RecompBackend.OpenXR.RepositoryOwner, RecompBackend.OpenXR.RepositoryName, Arg.Any<int>())
+            .Returns(
+                Task.FromResult(
+                    Ok(
+                        new List<GithubRelease>
+                        {
+                            new()
+                            {
+                                TagName = "v0.2.32",
+                                Assets = [new() { Name = "WiiCompiled-Setup.exe", BrowserDownloadUrl = "https://example.invalid/setup" }],
+                            },
+                        }
+                    )
+                )
+            );
+
+        var result = await service.FindQuestAppAsync();
+        Assert.True(result.IsFailure);
+        Assert.Contains("0.2.32", result.Error.Message);
+
+        using var normal = Create(RecompBackend.Normal);
+        Assert.True((await normal.FindQuestAppAsync()).IsFailure);
     }
 
     [Fact]

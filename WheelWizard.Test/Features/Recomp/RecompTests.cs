@@ -1,3 +1,4 @@
+using WheelWizard.GitHub.Domain;
 using WheelWizard.Models.Enums;
 using WheelWizard.Recomp;
 using WheelWizard.Recomp.Domain;
@@ -125,6 +126,83 @@ public class RecompTests
                     @"D:\RetroRewind6"
                 )
         );
+    }
+
+    [Fact]
+    public void QuestApp_IsTheOnePublishedWithTheInstalledRelease()
+    {
+        var releases = new List<GithubRelease>
+        {
+            new()
+            {
+                TagName = "0.2.43",
+                Assets =
+                [
+                    new() { Name = "WiiCompiled-Setup.exe", BrowserDownloadUrl = "https://example.invalid/0.2.43/setup" },
+                    new()
+                    {
+                        Name = "WiiCompiledVR-Quest-0.4.0.apk",
+                        BrowserDownloadUrl = "https://example.invalid/0.2.43/app",
+                        Size = 122241847,
+                    },
+                ],
+            },
+            new()
+            {
+                TagName = "v0.2.42",
+                Assets =
+                [
+                    new() { Name = "WiiCompiled-Setup.exe", BrowserDownloadUrl = "https://example.invalid/0.2.42/setup" },
+                    new() { Name = "WiiCompiledVR-Quest-0.3.0.apk", BrowserDownloadUrl = "https://example.invalid/0.2.42/app" },
+                ],
+            },
+            new()
+            {
+                TagName = "0.2.38",
+                Assets = [new() { Name = "WiiCompiled-Setup.exe", BrowserDownloadUrl = "https://example.invalid/0.2.38/setup" }],
+            },
+        };
+
+        // The installed release's app, never the newest one: only its kit fits the installation.
+        var app = RecompQuestAppResolver.FindForInstalledVersion(releases, "0.2.42");
+        Assert.NotNull(app);
+        Assert.Equal("v0.2.42", app.ReleaseTag);
+        Assert.Equal("0.3.0", app.AppVersion);
+        Assert.Equal("WiiCompiledVR-Quest-0.3.0.apk", app.FileName);
+        Assert.Equal("https://example.invalid/0.2.42/app", app.DownloadUrl);
+        Assert.Null(app.SizeBytes);
+        Assert.Equal("Quest app 0.3.0", app.DisplayName);
+
+        // The tag's leading v and the state's bare version are the same release.
+        var latest = RecompQuestAppResolver.FindForInstalledVersion(releases, "v0.2.43");
+        Assert.NotNull(latest);
+        Assert.Equal("0.4.0", latest.AppVersion);
+        Assert.Equal(122241847, latest.SizeBytes);
+
+        // A release from before the Quest app, or one that is not published, has no app to offer.
+        Assert.Null(RecompQuestAppResolver.FindForInstalledVersion(releases, "0.2.38"));
+        Assert.Null(RecompQuestAppResolver.FindForInstalledVersion(releases, "0.2.44"));
+        Assert.Null(RecompQuestAppResolver.FindForInstalledVersion(releases, null));
+        Assert.Null(RecompQuestAppResolver.FindForInstalledVersion(null, "0.2.43"));
+    }
+
+    [Fact]
+    public void QuestApp_FallsBackToAnyApkOnAHandMadeRelease()
+    {
+        var releases = new List<GithubRelease>
+        {
+            new()
+            {
+                TagName = "0.2.50",
+                Assets = [new() { Name = "quest-app-debug.apk", BrowserDownloadUrl = "https://example.invalid/0.2.50/app" }],
+            },
+        };
+
+        var app = RecompQuestAppResolver.FindForInstalledVersion(releases, "0.2.50");
+        Assert.NotNull(app);
+        Assert.Null(app.AppVersion);
+        Assert.Equal("quest-app-debug.apk", app.FileName);
+        Assert.Equal("Quest app from WiiCompiled 0.2.50", app.DisplayName);
     }
 
     [Fact]

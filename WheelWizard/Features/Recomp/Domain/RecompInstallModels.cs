@@ -16,6 +16,22 @@ public sealed record RecompInstallProgress(string Message, int Percent);
 public sealed record RecompRelease(string TagName, SemVersion Version, string SetupDownloadUrl);
 
 /// <summary>
+/// The Meta Quest app published on the GitHub release a WiiCompiled installation was made from. The
+/// app's APK carries the game kit a Quest build compiles against, and only the app from the same
+/// release fits an installation, so this is the one file a Quest build can fetch on the player's behalf.
+/// </summary>
+/// <param name="ReleaseTag">The raw tag of the release that carries the app (e.g. <c>0.2.43</c>).</param>
+/// <param name="AppVersion">The app's own version as its file name states it (e.g. <c>0.4.0</c>), or <see langword="null"/> when the name does not say.</param>
+/// <param name="FileName">The APK asset's file name, which is also how the app is kept in the cache.</param>
+/// <param name="DownloadUrl">Direct download URL of the APK asset.</param>
+/// <param name="SizeBytes">The APK's size as GitHub lists it, used to tell a complete download from a truncated one.</param>
+public sealed record RecompQuestApp(string ReleaseTag, string? AppVersion, string FileName, string DownloadUrl, long? SizeBytes)
+{
+    /// <summary>The app as a player would name it: its own version when known, else the release it came with.</summary>
+    public string DisplayName => AppVersion is null ? $"Quest app from WiiCompiled {ReleaseTag}" : $"Quest app {AppVersion}";
+}
+
+/// <summary>
 /// The contents of <c>install-state.json</c>, written by the recomp setup executable into its install directory.
 /// Its existence (and parse-ability) is what marks the recomp as installed.
 /// </summary>

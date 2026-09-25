@@ -52,9 +52,11 @@ public class SettingsManager : ISettingsManager
         RECOMP_USE_DOLPHIN_DATA = RegisterWhWz("RecompUseDolphinData", false);
         // Whether private mode was initialized from the Wheel Wizard-owned Dolphin clone.
         RECOMP_COPY_DOLPHIN_NAND = RegisterWhWz("RecompCopyDolphinNand", false);
-        // The Quest app a Quest build compiles against: its APK carries the game kit. Remembered so
-        // the player chooses it once instead of for every build; a file that has gone reads as unset.
-        RECOMP_QUEST_APK = RegisterWhWz("RecompQuestApk", "");
+        // An APK the player chose to build for Quest against instead of the app WheelWizard downloads
+        // from the installation's own release. Empty, the usual case, means automatic; a file that
+        // has gone reads as unset. This is a new key on purpose: an app picked back when choosing
+        // one was mandatory must not silently outlive the release it belonged to.
+        RECOMP_QUEST_APK_OVERRIDE = RegisterWhWz("RecompQuestApkOverride", "");
         DOLPHIN_LOCATION = RegisterWhWz(
             "DolphinLocation",
             "",
@@ -242,7 +244,7 @@ public class SettingsManager : ISettingsManager
     public Setting ENABLE_RECOMP_VR { get; }
     public Setting RECOMP_USE_DOLPHIN_DATA { get; }
     public Setting RECOMP_COPY_DOLPHIN_NAND { get; }
-    public Setting RECOMP_QUEST_APK { get; }
+    public Setting RECOMP_QUEST_APK_OVERRIDE { get; }
     public Setting PREFERS_MODS_ROW_VIEW { get; }
     public Setting USE_PATCHES_SYSTEM { get; }
     public Setting FOCUSED_USER { get; }

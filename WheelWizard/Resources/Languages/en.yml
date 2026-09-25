@@ -263,6 +263,7 @@ en:
     uninstalling_recomp: "Uninstalling WiiCompiled"
     recomp_checking_release: "Looking for the latest WiiCompiled release"
     recomp_downloading_setup: "Downloading the WiiCompiled installer"
+    recomp_downloading_quest_app: "Downloading the WiiCompiled Quest app"
     recomp_running_setup: "Running the WiiCompiled installer"
     recomp_finished: "WiiCompiled is ready to play"
     recomp_copying_nand: "Copying your Dolphin data"

@@ -96,19 +96,26 @@
                     <Border Classes="SettingsBlockStyle SettingsRowStyle SettingsRowSingle">
                         <Grid ColumnDefinitions="*,Auto" MinHeight="40">
                             <StackPanel Margin="0,0,12,0" Spacing="3" VerticalAlignment="Center">
-                                <TextBlock Classes="BodyText" TextWrapping="Wrap" Text="APK file" />
+                                <TextBlock Classes="BodyText" TextWrapping="Wrap" x:Name="ApkTitleText" Text="Downloaded for you" />
                                 <TextBlock Classes="TinyText" TextWrapping="Wrap" x:Name="ApkPathText"
-                                           Text="The app holds the game kit your game is built against, so it decides how the game is compiled." />
+                                           Text="Downloaded from the WiiCompiled release this installation came from, so the game always fits the app." />
                             </StackPanel>
-                            <components:Button Grid.Column="1"
-                                               x:Name="ChooseApkButton"
-                                               Variant="Default"
-                                               ButtonSize="Compact"
-                                               IconData="{StaticResource Folder}"
-                                               Text="Choose"
-                                               HorizontalAlignment="Right"
-                                               VerticalAlignment="Center"
-                                               Click="ChooseApk_OnClick" />
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6"
+                                        HorizontalAlignment="Right" VerticalAlignment="Center">
+                                <components:Button x:Name="UseDownloadedAppButton"
+                                                   Variant="Default"
+                                                   ButtonSize="Compact"
+                                                   IconData="{StaticResource Download}"
+                                                   Text="Automatic"
+                                                   IsVisible="False"
+                                                   Click="UseDownloadedApp_OnClick" />
+                                <components:Button x:Name="ChooseApkButton"
+                                                   Variant="Default"
+                                                   ButtonSize="Compact"
+                                                   IconData="{StaticResource Folder}"
+                                                   Text="Choose"
+                                                   Click="ChooseApk_OnClick" />
+                            </StackPanel>
                         </Grid>
                     </Border>
                 </StackPanel>

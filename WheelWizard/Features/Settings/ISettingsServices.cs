@@ -43,7 +43,7 @@ public interface ISettingsProperties
     Setting ENABLE_RECOMP_VR { get; }
     Setting RECOMP_USE_DOLPHIN_DATA { get; }
     Setting RECOMP_COPY_DOLPHIN_NAND { get; }
-    Setting RECOMP_QUEST_APK { get; }
+    Setting RECOMP_QUEST_APK_OVERRIDE { get; }
     Setting PREFERS_MODS_ROW_VIEW { get; }
     Setting USE_PATCHES_SYSTEM { get; }
     Setting FOCUSED_USER { get; }

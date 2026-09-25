@@ -1,4 +1,5 @@
 ﻿using System.IO.Abstractions;
+using System.IO.Compression;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using WheelWizard.GitHub;
@@ -100,6 +101,24 @@ public interface IRecompInstallService : IDisposable
     /// letting the player choose files for a build that is refused.
     /// </summary>
     Task<bool> SupportsQuestBuildAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Finds the Meta Quest app published on the GitHub release this VR installation was made from.
+    /// Only that app's game kit fits the installation, so the player never has to know which APK to
+    /// pick. Fails when GitHub cannot be reached or the installed release ships no app.
+    /// </summary>
+    Task<OperationResult<RecompQuestApp>> FindQuestAppAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Makes sure <paramref name="app"/> is in the setup cache and returns its path, downloading it once
+    /// and keeping the copy between builds. The file is checked to be a complete WiiCompiled Quest app
+    /// before it is handed out, so a truncated or wrong download never reaches the setup host.
+    /// </summary>
+    Task<OperationResult<string>> DownloadQuestAppAsync(
+        RecompQuestApp app,
+        IProgress<RecompInstallProgress>? progress = null,
+        CancellationToken cancellationToken = default
+    );
 }
 
 /// <inheritdoc />
@@ -757,6 +776,124 @@ public sealed class RecompInstallService : IRecompInstallService
     public async Task<bool> SupportsQuestBuildAsync(CancellationToken cancellationToken = default) =>
         Backend.Kind == RecompBackendKind.OpenXR && IsInstalled && await SetupSupportsQuestBuildAsync(cancellationToken);
 
+    public async Task<OperationResult<RecompQuestApp>> FindQuestAppAsync(CancellationToken cancellationToken = default)
+    {
+        if (Backend.Kind != RecompBackendKind.OpenXR)
+            return Fail("Building for Meta Quest needs the WiiCompiled VR installation.");
+        if (!IsInstalled)
+            return Fail("WiiCompiled is not installed yet.");
+        var state = ReadCurrentInstallState();
+        if (state is null)
+            return Fail("WiiCompiled requires a current install-state.json for its fixed installation path.");
+
+        cancellationToken.ThrowIfCancellationRequested();
+        var releasesResult = await gitHubService.GetReleasesAsync(Backend.RepositoryOwner, Backend.RepositoryName, count: 100);
+        if (releasesResult.IsFailure)
+        {
+            logger.LogWarning("Could not retrieve the recomp releases: {Message}", releasesResult.Error.Message);
+            return Fail(
+                "Could not reach GitHub to find the Quest app. Check your connection and try again, or choose the APK file yourself."
+            );
+        }
+
+        var app = RecompQuestAppResolver.FindForInstalledVersion(releasesResult.Value, state.SetupVersion);
+        if (app is null)
+        {
+            return Fail(
+                $"No Quest app is published for WiiCompiled {state.SetupVersion}. Update WiiCompiled from Settings, then build again."
+            );
+        }
+
+        logger.LogInformation("The Quest app for WiiCompiled {Version} is {FileName}", state.SetupVersion, app.FileName);
+        return Ok(app);
+    }
+
+    public async Task<OperationResult<string>> DownloadQuestAppAsync(
+        RecompQuestApp app,
+        IProgress<RecompInstallProgress>? progress = null,
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (!await _operationGate.WaitAsync(0, cancellationToken))
+            return Fail(OperationAlreadyRunningMessage);
+
+        try
+        {
+            var cachedPath = fileSystem.Path.Combine(environment.CacheFolderPath, BuildCachedQuestAppFileName(app));
+            if (IsCompleteQuestApp(cachedPath, app.SizeBytes))
+            {
+                PruneCachedFilesExcept("*.apk", cachedPath);
+                return Ok(cachedPath);
+            }
+
+            var message = t("progress.recomp_downloading_quest_app");
+            Report(progress, message, 0);
+            var downloadProgress = new DelegateProgress<int>(percent => Report(progress, message, percent));
+            var downloadResult = await downloader.DownloadAsync(app.DownloadUrl, cachedPath, downloadProgress, cancellationToken);
+            if (downloadResult.IsFailure)
+                return downloadResult.Error;
+
+            if (!IsCompleteQuestApp(cachedPath, app.SizeBytes))
+            {
+                var removed = DeleteInvalidSetup(cachedPath);
+                return removed
+                    ? Fail($"The downloaded {app.FileName} is not a complete WiiCompiled Quest app.")
+                    : Fail($"The downloaded {app.FileName} is not a complete WiiCompiled Quest app and could not be removed.");
+            }
+
+            PruneCachedFilesExcept("*.apk", cachedPath);
+            logger.LogInformation("Cached the WiiCompiled Quest app at {Path}", cachedPath);
+            return Ok(cachedPath);
+        }
+        finally
+        {
+            _operationGate.Release();
+        }
+    }
+
+    /// <summary>
+    /// The app is kept under its published name, so a player who copies it to the headset sees the
+    /// same file the release page shows. A name that is not a plain <c>.apk</c> file name falls back
+    /// to one built from the release tag.
+    /// </summary>
+    private static string BuildCachedQuestAppFileName(RecompQuestApp app)
+    {
+        var name = app.FileName;
+        if (
+            !string.IsNullOrWhiteSpace(name)
+            && name.EndsWith(".apk", StringComparison.OrdinalIgnoreCase)
+            && name.IndexOfAny(Path.GetInvalidFileNameChars()) < 0
+            && name == Path.GetFileName(name)
+        )
+            return name;
+
+        var sanitized = new string(app.ReleaseTag.Select(character => char.IsLetterOrDigit(character) ? character : '-').ToArray());
+        return $"WiiCompiledVR-Quest-{sanitized}.apk";
+    }
+
+    /// <summary>
+    /// Whether the file is the whole app: the size GitHub lists, when known, and a readable archive
+    /// that carries the game kit's recipe, which is what a Quest build extracts from it.
+    /// </summary>
+    private bool IsCompleteQuestApp(string filePath, long? expectedSize)
+    {
+        if (!IsUsableFile(filePath))
+            return false;
+        try
+        {
+            if (expectedSize is > 0 && fileSystem.FileInfo.New(filePath).Length != expectedSize.Value)
+                return false;
+            using var stream = fileSystem.File.OpenRead(filePath);
+            using var archive = new ZipArchive(stream, ZipArchiveMode.Read);
+            return archive.GetEntry("assets/game_kit/kit.json") is not null;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException)
+        {
+            logger.LogWarning(exception, "The cached Quest app at {Path} is not readable", filePath);
+            return false;
+        }
+    }
+
     private async Task<bool> SetupSupportsQuestBuildAsync(CancellationToken cancellationToken)
     {
         var supported = false;
@@ -790,7 +927,7 @@ public sealed class RecompInstallService : IRecompInstallService
         var cachedSetupPath = fileSystem.Path.Combine(environment.CacheFolderPath, BuildCachedSetupFileName(release.TagName));
         if (IsUsableFile(cachedSetupPath) && await SetupMatchesVersionAsync(cachedSetupPath, release.TagName, cancellationToken))
         {
-            PruneCachedSetupsExcept(cachedSetupPath);
+            PruneCachedFilesExcept("WiiCompiled-Setup-*.exe", cachedSetupPath);
             return Ok(cachedSetupPath);
         }
 
@@ -816,40 +953,41 @@ public sealed class RecompInstallService : IRecompInstallService
                 : Fail($"The downloaded WiiCompiled setup did not report release {release.TagName} and could not be removed.");
         }
 
-        PruneCachedSetupsExcept(cachedSetupPath);
+        PruneCachedFilesExcept("WiiCompiled-Setup-*.exe", cachedSetupPath);
         return Ok(cachedSetupPath);
     }
 
     /// <summary>
-    /// Drops setup executables cached for other releases. Each one is around 380 MB and the cache is
-    /// only ever read for the release currently being installed, so keeping them meant every update
-    /// permanently cost the user another installer's worth of disk. Failure here is deliberately
-    /// silent: it is disk hygiene, never a reason to fail an install that has already succeeded.
+    /// Drops the cached files matching <paramref name="pattern"/> that belong to other releases: setup
+    /// executables of around 380 MB, Quest apps of around 120 MB. The cache is only ever read for the
+    /// release currently installed, so keeping them meant every update permanently cost the user
+    /// another download's worth of disk. Failure here is deliberately silent: it is disk hygiene,
+    /// never a reason to fail an operation that has already succeeded.
     /// </summary>
-    private void PruneCachedSetupsExcept(string keepFilePath)
+    private void PruneCachedFilesExcept(string pattern, string keepFilePath)
     {
         try
         {
             if (!fileSystem.Directory.Exists(environment.CacheFolderPath))
                 return;
-            foreach (var candidate in fileSystem.Directory.EnumerateFiles(environment.CacheFolderPath, "WiiCompiled-Setup-*.exe"))
+            foreach (var candidate in fileSystem.Directory.EnumerateFiles(environment.CacheFolderPath, pattern))
             {
                 if (string.Equals(candidate, keepFilePath, StringComparison.OrdinalIgnoreCase))
                     continue;
                 try
                 {
                     fileSystem.File.Delete(candidate);
-                    logger.LogInformation("Removed the superseded cached WiiCompiled setup {Path}", candidate);
+                    logger.LogInformation("Removed the superseded cached WiiCompiled file {Path}", candidate);
                 }
                 catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
                 {
-                    logger.LogDebug(exception, "Could not remove the cached WiiCompiled setup {Path}", candidate);
+                    logger.LogDebug(exception, "Could not remove the cached WiiCompiled file {Path}", candidate);
                 }
             }
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
-            logger.LogDebug(exception, "Could not enumerate the WiiCompiled setup cache for pruning.");
+            logger.LogDebug(exception, "Could not enumerate the WiiCompiled cache for pruning.");
         }
     }
 
