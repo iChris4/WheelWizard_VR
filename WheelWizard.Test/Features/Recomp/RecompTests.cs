@@ -187,6 +187,47 @@ public class RecompTests
     }
 
     [Fact]
+    public void QuestApp_ForTheOriginalQuestIsItsOwnFile()
+    {
+        var releases = new List<GithubRelease>
+        {
+            new()
+            {
+                TagName = "0.2.44",
+                Assets =
+                [
+                    new() { Name = "WiiCompiled-Setup.exe", BrowserDownloadUrl = "https://example.invalid/0.2.44/setup" },
+                    // Listed first on purpose: the modern app must not be picked by position.
+                    new() { Name = "WiiCompiledVR-Quest1-0.5.0.apk", BrowserDownloadUrl = "https://example.invalid/0.2.44/quest1" },
+                    new() { Name = "WiiCompiledVR-Quest-0.5.0.apk", BrowserDownloadUrl = "https://example.invalid/0.2.44/app" },
+                ],
+            },
+            new()
+            {
+                TagName = "0.2.43",
+                Assets = [new() { Name = "WiiCompiledVR-Quest-0.4.0.apk", BrowserDownloadUrl = "https://example.invalid/0.2.43/app" }],
+            },
+        };
+
+        var modern = RecompQuestAppResolver.FindForInstalledVersion(releases, "0.2.44");
+        Assert.NotNull(modern);
+        Assert.Equal("WiiCompiledVR-Quest-0.5.0.apk", modern.FileName);
+        Assert.Equal(RecompQuestHeadset.ModernQuest, modern.Headset);
+        Assert.Equal("Quest app 0.5.0", modern.DisplayName);
+
+        var original = RecompQuestAppResolver.FindForInstalledVersion(releases, "0.2.44", RecompQuestHeadset.OriginalQuest);
+        Assert.NotNull(original);
+        Assert.Equal("WiiCompiledVR-Quest1-0.5.0.apk", original.FileName);
+        Assert.Equal("0.5.0", original.AppVersion);
+        Assert.Equal(RecompQuestHeadset.OriginalQuest, original.Headset);
+        Assert.Equal("Quest 1 app 0.5.0", original.DisplayName);
+
+        // A release from before the original Quest's app has none to offer, and the modern app is never
+        // handed out in its place: it would crash on that headset instead of being refused.
+        Assert.Null(RecompQuestAppResolver.FindForInstalledVersion(releases, "0.2.43", RecompQuestHeadset.OriginalQuest));
+    }
+
+    [Fact]
     public void QuestApp_FallsBackToAnyApkOnAHandMadeRelease()
     {
         var releases = new List<GithubRelease>
@@ -203,6 +244,9 @@ public class RecompTests
         Assert.Null(app.AppVersion);
         Assert.Equal("quest-app-debug.apk", app.FileName);
         Assert.Equal("Quest app from WiiCompiled 0.2.50", app.DisplayName);
+
+        // The fallback is for the modern app only; an unnamed APK is not assumed to fit the original Quest.
+        Assert.Null(RecompQuestAppResolver.FindForInstalledVersion(releases, "0.2.50", RecompQuestHeadset.OriginalQuest));
     }
 
     [Fact]

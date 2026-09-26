@@ -57,6 +57,9 @@ public class SettingsManager : ISettingsManager
         // has gone reads as unset. This is a new key on purpose: an app picked back when choosing
         // one was mandatory must not silently outlive the release it belonged to.
         RECOMP_QUEST_APK_OVERRIDE = RegisterWhWz("RecompQuestApkOverride", "");
+        // Which Meta Quest Build for Quest fetches the app for, as RecompQuestHeadsets' setting values.
+        // The modern app is the default; the original Quest's is a separate app with its own kit.
+        RECOMP_QUEST_HEADSET = RegisterWhWz("RecompQuestHeadset", RecompQuestHeadsets.ModernSettingValue);
         DOLPHIN_LOCATION = RegisterWhWz(
             "DolphinLocation",
             "",
@@ -245,6 +248,7 @@ public class SettingsManager : ISettingsManager
     public Setting RECOMP_USE_DOLPHIN_DATA { get; }
     public Setting RECOMP_COPY_DOLPHIN_NAND { get; }
     public Setting RECOMP_QUEST_APK_OVERRIDE { get; }
+    public Setting RECOMP_QUEST_HEADSET { get; }
     public Setting PREFERS_MODS_ROW_VIEW { get; }
     public Setting USE_PATCHES_SYSTEM { get; }
     public Setting FOCUSED_USER { get; }

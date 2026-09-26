@@ -98,6 +98,7 @@ public sealed class RecompBackendServiceTests : IDisposable
                                 Assets =
                                 [
                                     new() { Name = "WiiCompiled-Setup.exe", BrowserDownloadUrl = "https://example.invalid/setup" },
+                                    new() { Name = "WiiCompiledVR-Quest1-0.4.0.apk", BrowserDownloadUrl = "https://example.invalid/quest1" },
                                     new() { Name = "WiiCompiledVR-Quest-0.4.0.apk", BrowserDownloadUrl = "https://example.invalid/app" },
                                 ],
                             },
@@ -346,6 +347,26 @@ public sealed class RecompBackendServiceTests : IDisposable
             _commands,
             command => command.StartsWith("--build-quest") && command.Contains("--quest-apk \"" + first.Value + "\"")
         );
+    }
+
+    [Fact]
+    public async Task QuestAppFollowsTheChosenHeadset()
+    {
+        using var service = Create(RecompBackend.OpenXR);
+
+        var original = await service.FindQuestAppAsync(RecompQuestHeadset.OriginalQuest);
+        Assert.True(original.IsSuccess, original.IsFailure ? original.Error.Message : null);
+        Assert.Equal("WiiCompiledVR-Quest1-0.4.0.apk", original.Value.FileName);
+        Assert.Equal("https://example.invalid/quest1", original.Value.DownloadUrl);
+
+        // Each app is cached under its own name, so switching headsets never serves the other's file.
+        var downloaded = await service.DownloadQuestAppAsync(original.Value);
+        Assert.True(downloaded.IsSuccess, downloaded.IsFailure ? downloaded.Error.Message : null);
+        Assert.Equal("WiiCompiledVR-Quest1-0.4.0.apk", Path.GetFileName(downloaded.Value));
+
+        var modern = await service.FindQuestAppAsync();
+        Assert.True(modern.IsSuccess);
+        Assert.Equal("WiiCompiledVR-Quest-0.4.0.apk", modern.Value.FileName);
     }
 
     [Fact]

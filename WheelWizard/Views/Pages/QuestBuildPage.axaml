@@ -50,16 +50,16 @@
                 <TextBlock Classes="TinyText" TextWrapping="Wrap" Margin="2,0,2,10"
                            Text="The WiiCompiled Quest app carries no game code. This builds the game for it from this installation, which was made from your own disc, and saves it as a .wcgame file you copy to the headset." />
 
-                <components:FormFieldLabel Text="Game" Margin="0,0,0,4" />
-                <StackPanel x:Name="GameSection" Spacing="4" Margin="0,0,0,7">
+                <components:FormFieldLabel Text="Headset" Margin="0,0,0,4" />
+                <StackPanel x:Name="HeadsetSection" Spacing="4" Margin="0,0,0,7">
                     <Border Classes="SettingsBlockStyle SettingsRowStyle SettingsRowSingle">
                         <Grid ColumnDefinitions="*,Auto" MinHeight="40">
                             <StackPanel Margin="0,0,12,0" Spacing="3" VerticalAlignment="Center">
-                                <TextBlock Classes="BodyText" TextWrapping="Wrap" Text="Which game" />
+                                <TextBlock Classes="BodyText" TextWrapping="Wrap" Text="Which Quest" />
                                 <TextBlock Classes="TinyText" TextWrapping="Wrap"
-                                           Text="The app plays both, and keeps each game it is given." />
+                                           Text="Each kind has its own app, fetched for you, and a game built for one does not load in the other." />
                             </StackPanel>
-                            <ComboBox Grid.Column="1" x:Name="GameDropdown" Width="160"
+                            <ComboBox Grid.Column="1" x:Name="HeadsetDropdown" Width="190"
                                       HorizontalAlignment="Right" VerticalAlignment="Center" />
                         </Grid>
                     </Border>
@@ -81,9 +81,9 @@
                     <Border Classes="SettingsBlockStyle SettingsRowStyle SettingsRowBottom">
                         <Grid ColumnDefinitions="*,Auto" MinHeight="40">
                             <StackPanel Margin="0,0,12,0" Spacing="3" VerticalAlignment="Center">
-                                <TextBlock Classes="BodyText" TextWrapping="Wrap" Text="The Retro Rewind pack" />
+                                <TextBlock Classes="BodyText" TextWrapping="Wrap" Text="Retro Rewind and its pack" />
                                 <TextBlock Classes="TinyText" TextWrapping="Wrap"
-                                           Text="Retro Rewind needs its pack on the headset and cannot download it there. Adds about 2 GB." />
+                                           Text="Builds Retro Rewind instead of Mario Kart Wii, with its pack (about 2 GB) so the headset needs nothing else. The app plays both games and keeps each it is given." />
                             </StackPanel>
                             <CheckBox Grid.Column="1" x:Name="IncludeModContent" Classes="SwitchDark"
                                       HorizontalAlignment="Right" VerticalAlignment="Center" />

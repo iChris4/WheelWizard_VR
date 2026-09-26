@@ -21,7 +21,7 @@ namespace WheelWizard.Views.Pages;
 public partial class QuestBuildPage : UserControlBase
 {
     private const string AutomaticAppText =
-        "Downloaded from the WiiCompiled release this installation came from, so the game always fits the app.";
+        "Downloaded from the WiiCompiled release this installation came from, for the Quest chosen above, so the game always fits the app.";
 
     // How much of the progress bar the app download takes before the build itself starts.
     private const int DownloadPercentShare = 10;
@@ -41,12 +41,11 @@ public partial class QuestBuildPage : UserControlBase
     {
         InitializeComponent();
 
-        GameDropdown.ItemsSource = new[] { "Mario Kart Wii", "Retro Rewind" };
-        GameDropdown.SelectedIndex = 0;
-        GameDropdown.SelectionChanged += (_, _) => UpdateGameDependentControls();
+        HeadsetDropdown.ItemsSource = RecompQuestHeadsets.Offered.Select(headset => headset.DisplayName()).ToList();
+        HeadsetDropdown.SelectedIndex = RecompQuestHeadsets.Offered.ToList().IndexOf(SavedHeadset());
+        HeadsetDropdown.SelectionChanged += async (_, _) => await Headset_OnChangedAsync();
         IncludeGameFiles.IsChecked = true;
         ShowQuestAppSource();
-        UpdateGameDependentControls();
 
         AttachedToVisualTree += (_, _) => RecompOperationCoordinator.Changed += RefreshOperationState;
         DetachedFromVisualTree += (_, _) => RecompOperationCoordinator.Changed -= RefreshOperationState;
@@ -54,7 +53,27 @@ public partial class QuestBuildPage : UserControlBase
         _ = RefreshAvailabilityAsync();
     }
 
-    private bool IsRetroRewind => GameDropdown.SelectedIndex == 1;
+    /// <summary>
+    /// One switch decides the game: the pack only travels with Retro Rewind, and Retro Rewind on the
+    /// headset needs it, so a separate game choice would only let the two disagree.
+    /// </summary>
+    private bool IsRetroRewind => IncludeModContent.IsChecked == true;
+
+    private RecompQuestHeadset SavedHeadset() =>
+        RecompQuestHeadsets.FromSettingValue(SettingsService.Get<string>(SettingsService.RECOMP_QUEST_HEADSET));
+
+    private RecompQuestHeadset SelectedHeadset =>
+        HeadsetDropdown.SelectedIndex >= 0 && HeadsetDropdown.SelectedIndex < RecompQuestHeadsets.Offered.Count
+            ? RecompQuestHeadsets.Offered[HeadsetDropdown.SelectedIndex]
+            : RecompQuestHeadset.ModernQuest;
+
+    private async Task Headset_OnChangedAsync()
+    {
+        SettingsService.Set(SettingsService.RECOMP_QUEST_HEADSET, SelectedHeadset.ToSettingValue());
+        ShowQuestAppSource();
+        if (_supported)
+            await DescribeDownloadedAppAsync();
+    }
 
     private void RefreshOperationState() => Dispatcher.UIThread.Post(() => IsEnabled = !RecompOperationCoordinator.IsBusy);
 
@@ -77,14 +96,6 @@ public partial class QuestBuildPage : UserControlBase
         UseDownloadedAppButton.IsVisible = !automatic;
     }
 
-    private void UpdateGameDependentControls()
-    {
-        // Only the modded game has a pack to carry.
-        IncludeModContent.IsEnabled = IsRetroRewind;
-        if (!IsRetroRewind)
-            IncludeModContent.IsChecked = false;
-    }
-
     /// <summary>
     /// Says upfront when this installation cannot build for the Quest at all, instead of letting the
     /// player pick files for a build that is going to be refused.
@@ -95,15 +106,12 @@ public partial class QuestBuildPage : UserControlBase
         _supported = message is null;
         UnavailableBanner.IsVisible = !_supported;
         UnavailableText.Text = message ?? string.Empty;
-        GameSection.IsEnabled = _supported;
+        HeadsetSection.IsEnabled = _supported;
         IncludeSection.IsEnabled = _supported;
         ApkSection.IsEnabled = _supported;
         BuildButton.IsEnabled = _supported;
         if (_supported)
-        {
-            UpdateGameDependentControls();
             await DescribeDownloadedAppAsync();
-        }
     }
 
     /// <summary>
@@ -115,8 +123,10 @@ public partial class QuestBuildPage : UserControlBase
         if (RecompInstallService is null || !string.IsNullOrEmpty(ChosenApkPath()))
             return;
 
-        var found = await RecompInstallService.FindQuestAppAsync();
-        if (found.IsFailure || !string.IsNullOrEmpty(ChosenApkPath()))
+        var headset = SelectedHeadset;
+        var found = await RecompInstallService.FindQuestAppAsync(headset);
+        // The player may have switched headset or chosen a file while GitHub answered.
+        if (found.IsFailure || headset != SelectedHeadset || !string.IsNullOrEmpty(ChosenApkPath()))
             return;
 
         var app = found.Value;
@@ -168,7 +178,7 @@ public partial class QuestBuildPage : UserControlBase
         RecompQuestApp? app = null;
         if (string.IsNullOrEmpty(chosenApk))
         {
-            var found = await RecompInstallService.FindQuestAppAsync();
+            var found = await RecompInstallService.FindQuestAppAsync(SelectedHeadset);
             if (found.IsFailure)
             {
                 await new MessageBoxWindow()
@@ -182,7 +192,7 @@ public partial class QuestBuildPage : UserControlBase
         }
 
         var retroRewind = IsRetroRewind;
-        var includeModContent = retroRewind && IncludeModContent.IsChecked == true;
+        var includeModContent = retroRewind;
         RecompInstallService.SelectGame(retroRewind ? RecompGame.RetroRewind : RecompGame.Base);
 
         var outputPath = await FilePickerHelper.SaveFileAsync(

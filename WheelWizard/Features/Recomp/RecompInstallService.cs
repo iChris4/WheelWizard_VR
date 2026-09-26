@@ -105,9 +105,13 @@ public interface IRecompInstallService : IDisposable
     /// <summary>
     /// Finds the Meta Quest app published on the GitHub release this VR installation was made from.
     /// Only that app's game kit fits the installation, so the player never has to know which APK to
-    /// pick. Fails when GitHub cannot be reached or the installed release ships no app.
+    /// pick, only which headset it is for. Fails when GitHub cannot be reached or the installed release
+    /// ships no app for that headset.
     /// </summary>
-    Task<OperationResult<RecompQuestApp>> FindQuestAppAsync(CancellationToken cancellationToken = default);
+    Task<OperationResult<RecompQuestApp>> FindQuestAppAsync(
+        RecompQuestHeadset headset = RecompQuestHeadset.ModernQuest,
+        CancellationToken cancellationToken = default
+    );
 
     /// <summary>
     /// Makes sure <paramref name="app"/> is in the setup cache and returns its path, downloading it once
@@ -776,7 +780,10 @@ public sealed class RecompInstallService : IRecompInstallService
     public async Task<bool> SupportsQuestBuildAsync(CancellationToken cancellationToken = default) =>
         Backend.Kind == RecompBackendKind.OpenXR && IsInstalled && await SetupSupportsQuestBuildAsync(cancellationToken);
 
-    public async Task<OperationResult<RecompQuestApp>> FindQuestAppAsync(CancellationToken cancellationToken = default)
+    public async Task<OperationResult<RecompQuestApp>> FindQuestAppAsync(
+        RecompQuestHeadset headset = RecompQuestHeadset.ModernQuest,
+        CancellationToken cancellationToken = default
+    )
     {
         if (Backend.Kind != RecompBackendKind.OpenXR)
             return Fail("Building for Meta Quest needs the WiiCompiled VR installation.");
@@ -796,15 +803,15 @@ public sealed class RecompInstallService : IRecompInstallService
             );
         }
 
-        var app = RecompQuestAppResolver.FindForInstalledVersion(releasesResult.Value, state.SetupVersion);
+        var app = RecompQuestAppResolver.FindForInstalledVersion(releasesResult.Value, state.SetupVersion, headset);
         if (app is null)
         {
             return Fail(
-                $"No Quest app is published for WiiCompiled {state.SetupVersion}. Update WiiCompiled from Settings, then build again."
+                $"No {headset.AppNoun()} is published for WiiCompiled {state.SetupVersion}. Update WiiCompiled from Settings, then build again."
             );
         }
 
-        logger.LogInformation("The Quest app for WiiCompiled {Version} is {FileName}", state.SetupVersion, app.FileName);
+        logger.LogInformation("The {App} for WiiCompiled {Version} is {FileName}", headset.AppNoun(), state.SetupVersion, app.FileName);
         return Ok(app);
     }
 

@@ -25,10 +25,19 @@ public sealed record RecompRelease(string TagName, SemVersion Version, string Se
 /// <param name="FileName">The APK asset's file name, which is also how the app is kept in the cache.</param>
 /// <param name="DownloadUrl">Direct download URL of the APK asset.</param>
 /// <param name="SizeBytes">The APK's size as GitHub lists it, used to tell a complete download from a truncated one.</param>
-public sealed record RecompQuestApp(string ReleaseTag, string? AppVersion, string FileName, string DownloadUrl, long? SizeBytes)
+/// <param name="Headset">Which Meta Quest the app is for; a release's two apps do not share a game kit.</param>
+public sealed record RecompQuestApp(
+    string ReleaseTag,
+    string? AppVersion,
+    string FileName,
+    string DownloadUrl,
+    long? SizeBytes,
+    RecompQuestHeadset Headset = RecompQuestHeadset.ModernQuest
+)
 {
     /// <summary>The app as a player would name it: its own version when known, else the release it came with.</summary>
-    public string DisplayName => AppVersion is null ? $"Quest app from WiiCompiled {ReleaseTag}" : $"Quest app {AppVersion}";
+    public string DisplayName =>
+        AppVersion is null ? $"{Headset.AppNoun()} from WiiCompiled {ReleaseTag}" : $"{Headset.AppNoun()} {AppVersion}";
 }
 
 /// <summary>
