@@ -67,55 +67,15 @@
 
                 <components:FormFieldLabel Text="Include" Margin="0,10,0,4" />
                 <StackPanel x:Name="IncludeSection" Spacing="4" Margin="0,0,0,7">
-                    <Border Classes="SettingsBlockStyle SettingsRowStyle SettingsRowTop">
-                        <Grid ColumnDefinitions="*,Auto" MinHeight="40">
-                            <StackPanel Margin="0,0,12,0" Spacing="3" VerticalAlignment="Center">
-                                <TextBlock Classes="BodyText" TextWrapping="Wrap" Text="The game files" />
-                                <TextBlock Classes="TinyText" TextWrapping="Wrap"
-                                           Text="Adds this installation's disc files, about 3 GB, so the headset needs nothing else. Leave them out if you already extracted your disc in the Quest app." />
-                            </StackPanel>
-                            <CheckBox Grid.Column="1" x:Name="IncludeGameFiles" Classes="SwitchDark"
-                                      HorizontalAlignment="Right" VerticalAlignment="Center" />
-                        </Grid>
-                    </Border>
-                    <Border Classes="SettingsBlockStyle SettingsRowStyle SettingsRowBottom">
-                        <Grid ColumnDefinitions="*,Auto" MinHeight="40">
-                            <StackPanel Margin="0,0,12,0" Spacing="3" VerticalAlignment="Center">
-                                <TextBlock Classes="BodyText" TextWrapping="Wrap" Text="Retro Rewind and its pack" />
-                                <TextBlock Classes="TinyText" TextWrapping="Wrap"
-                                           Text="Builds Retro Rewind instead of Mario Kart Wii, with its pack (about 2 GB) so the headset needs nothing else. The app plays both games and keeps each it is given." />
-                            </StackPanel>
-                            <CheckBox Grid.Column="1" x:Name="IncludeModContent" Classes="SwitchDark"
-                                      HorizontalAlignment="Right" VerticalAlignment="Center" />
-                        </Grid>
-                    </Border>
-                </StackPanel>
-
-                <components:FormFieldLabel Text="Quest app" Margin="0,10,0,4" />
-                <StackPanel x:Name="ApkSection" Spacing="4" Margin="0,0,0,7">
                     <Border Classes="SettingsBlockStyle SettingsRowStyle SettingsRowSingle">
                         <Grid ColumnDefinitions="*,Auto" MinHeight="40">
                             <StackPanel Margin="0,0,12,0" Spacing="3" VerticalAlignment="Center">
-                                <TextBlock Classes="BodyText" TextWrapping="Wrap" x:Name="ApkTitleText" Text="Downloaded for you" />
-                                <TextBlock Classes="TinyText" TextWrapping="Wrap" x:Name="ApkPathText"
-                                           Text="Downloaded from the WiiCompiled release this installation came from, so the game always fits the app." />
+                                <TextBlock Classes="BodyText" TextWrapping="Wrap" Text="Which game" />
+                                <TextBlock Classes="TinyText" TextWrapping="Wrap"
+                                           Text="The game files always come along, and Retro Rewind brings its pack too, so the headset needs nothing else. The app plays both games and keeps each it is given." />
                             </StackPanel>
-                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6"
-                                        HorizontalAlignment="Right" VerticalAlignment="Center">
-                                <components:Button x:Name="UseDownloadedAppButton"
-                                                   Variant="Default"
-                                                   ButtonSize="Compact"
-                                                   IconData="{StaticResource Download}"
-                                                   Text="Automatic"
-                                                   IsVisible="False"
-                                                   Click="UseDownloadedApp_OnClick" />
-                                <components:Button x:Name="ChooseApkButton"
-                                                   Variant="Default"
-                                                   ButtonSize="Compact"
-                                                   IconData="{StaticResource Folder}"
-                                                   Text="Choose"
-                                                   Click="ChooseApk_OnClick" />
-                            </StackPanel>
+                            <ComboBox Grid.Column="1" x:Name="GameDropdown" Width="240"
+                                      HorizontalAlignment="Right" VerticalAlignment="Center" />
                         </Grid>
                     </Border>
                 </StackPanel>

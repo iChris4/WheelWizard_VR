@@ -98,7 +98,11 @@ public sealed class RecompBackendServiceTests : IDisposable
                                 Assets =
                                 [
                                     new() { Name = "WiiCompiled-Setup.exe", BrowserDownloadUrl = "https://example.invalid/setup" },
-                                    new() { Name = "WiiCompiledVR-Quest1-0.4.0.apk", BrowserDownloadUrl = "https://example.invalid/quest1" },
+                                    new()
+                                    {
+                                        Name = "WiiCompiledVR-Quest1-0.4.0.apk",
+                                        BrowserDownloadUrl = "https://example.invalid/quest1",
+                                    },
                                     new() { Name = "WiiCompiledVR-Quest-0.4.0.apk", BrowserDownloadUrl = "https://example.invalid/app" },
                                 ],
                             },
