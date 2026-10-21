@@ -52,17 +52,7 @@ public partial class RecompSettings : UserControlBase
             SaveVrSetting(SettingsService.RECOMP_VR_ENABLED, VrEnabled.IsChecked == true);
             RefreshGraphicsApiAvailability();
         };
-        VrHideDriver.IsCheckedChanged += (_, _) => SaveVrSetting(SettingsService.RECOMP_VR_HIDE_DRIVER, VrHideDriver.IsChecked == true);
-        VrHandSteering.IsCheckedChanged += (_, _) =>
-            SaveVrSetting(SettingsService.RECOMP_VR_HAND_STEERING, VrHandSteering.IsChecked == true);
         VrMirrorDropdown.SelectionChanged += (_, _) => SaveVrChoice(SettingsService.RECOMP_VR_MIRROR_VIEW, VrMirrorDropdown, MirrorValues);
-        VrCameraDropdown.SelectionChanged += (_, _) =>
-        {
-            if (VrCameraDropdown.SelectedIndex >= 0)
-                SaveVrSetting(SettingsService.RECOMP_VR_FIRST_PERSON, VrCameraDropdown.SelectedIndex == 1);
-        };
-        VrRotationDropdown.SelectionChanged += (_, _) =>
-            SaveVrChoice(SettingsService.RECOMP_VR_FIRST_PERSON_ROTATION, VrRotationDropdown, RotationValues);
         VrRenderScaleDropdown.SelectionChanged += (_, _) =>
         {
             var index = VrRenderScaleDropdown.SelectedIndex;
@@ -141,8 +131,8 @@ public partial class RecompSettings : UserControlBase
     private IReadOnlyList<double> _renderScales = RecompVideoConfig.RenderScales;
 
     private static readonly string[] MirrorValues = ["normal", "both", "left", "right", "none"];
-    private static readonly string[] RotationValues = ["yaw", "yaw_pitch", "full"];
 
+    // The race camera rows live on their own tab, RecompCameraSettings.
     private void LoadVrSettings()
     {
         VrSection.IsVisible = RecompEnvironment?.Backend.Kind == RecompBackendKind.OpenXR;
@@ -150,32 +140,14 @@ public partial class RecompSettings : UserControlBase
         if (!VrSection.IsVisible)
             return;
         VrEnabled.IsChecked = SettingsService.Get<bool>(SettingsService.RECOMP_VR_ENABLED);
-        VrHideDriver.IsChecked = SettingsService.Get<bool>(SettingsService.RECOMP_VR_HIDE_DRIVER);
-        VrHandSteering.IsChecked = SettingsService.Get<bool>(SettingsService.RECOMP_VR_HAND_STEERING);
         VrMirrorDropdown.ItemsSource = new[] { "Normal game", "Both eyes", "Left eye", "Right eye", "Black screen" };
         VrMirrorDropdown.SelectedIndex = Array.IndexOf(MirrorValues, SettingsService.Get<string>(SettingsService.RECOMP_VR_MIRROR_VIEW));
-        VrCameraDropdown.ItemsSource = new[] { "Chase camera", "First person" };
-        VrCameraDropdown.SelectedIndex = SettingsService.Get<bool>(SettingsService.RECOMP_VR_FIRST_PERSON) ? 1 : 0;
-        VrRotationDropdown.ItemsSource = new[] { "Turning only", "Turning + pitch", "Full rotation" };
-        VrRotationDropdown.SelectedIndex = Array.IndexOf(
-            RotationValues,
-            SettingsService.Get<string>(SettingsService.RECOMP_VR_FIRST_PERSON_ROTATION)
-        );
         // A scale set outside WheelWizard (the in-game panel takes any number) joins the list rather
         // than being shown as the nearest offered one, so the row never misreports what the game uses.
         var scale = SettingsService.Get<double>(SettingsService.RECOMP_VR_RENDER_SCALE);
         _renderScales = RecompVideoConfig.RenderScalesIncluding(scale);
         VrRenderScaleDropdown.ItemsSource = _renderScales.Select(RecompVideoConfig.DescribeRenderScale).ToList();
         VrRenderScaleDropdown.SelectedIndex = RecompVideoConfig.FindClosestRenderScaleIndex(_renderScales, scale);
-        RefreshVrCameraControls();
-    }
-
-    private void RefreshVrCameraControls()
-    {
-        var firstPerson = VrCameraDropdown.SelectedIndex == 1;
-        VrRotationDropdown.IsEnabled = firstPerson;
-        VrHideDriver.IsEnabled = firstPerson;
-        VrHandSteering.IsEnabled = firstPerson;
     }
 
     private void SaveVrChoice(Setting setting, ComboBox dropdown, string[] values)
@@ -196,7 +168,6 @@ public partial class RecompSettings : UserControlBase
             return;
         }
         SettingsService.Set(setting, value);
-        RefreshVrCameraControls();
     }
 
     #region WiiCompiled video settings

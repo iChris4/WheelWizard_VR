@@ -49,17 +49,22 @@ public partial class SettingsPage : UserControlBase
     /// <summary>
     /// In recomp mode the WiiCompiled tab is the video/data settings surface and Dolphin's Video tab
     /// is hidden: those settings only affect Dolphin and would silently do nothing for the recomp.
+    /// The OpenXR VR backend adds a Camera tab beside it, as the game's own settings panel has.
     /// </summary>
     private void UpdateTabVisibility()
     {
         var recompMode = SettingsService.IsRecompModeActive();
+        var vrMode = recompMode && SettingsService.Get<bool>(SettingsService.ENABLE_RECOMP_VR);
         RecompSettingsTab.IsVisible = recompMode;
-        RecompSettingsTab.Content = SettingsService.Get<bool>(SettingsService.ENABLE_RECOMP_VR) ? "OpenXR VR" : "WiiCompiled";
+        RecompSettingsTab.Content = vrMode ? "OpenXR VR" : "WiiCompiled";
+        RecompCameraSettingsTab.IsVisible = vrMode;
         VideoSettingsTab.IsVisible = !recompMode;
 
         // Never leave the content on a tab that just disappeared.
         var hiddenSelected =
-            (recompMode && SettingsContent.Content is VideoSettings) || (!recompMode && SettingsContent.Content is RecompSettings);
+            (recompMode && SettingsContent.Content is VideoSettings)
+            || (!recompMode && SettingsContent.Content is RecompSettings)
+            || (!vrMode && SettingsContent.Content is RecompCameraSettings);
         if (!hiddenSelected)
             return;
 

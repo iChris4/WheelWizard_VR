@@ -25,6 +25,8 @@
                              Click="TopBarRadio_OnClick" Content="Wheel Wizard" IsChecked="True" />
                 <RadioButton x:Name="RecompSettingsTab" Classes="TopBar" Tag="RecompSettings"
                              Click="TopBarRadio_OnClick" Content="WiiCompiled" IsVisible="False" />
+                <RadioButton x:Name="RecompCameraSettingsTab" Classes="TopBar" Tag="RecompCameraSettings"
+                             Click="TopBarRadio_OnClick" Content="Camera" IsVisible="False" />
                 <RadioButton x:Name="VideoSettingsTab" Classes="TopBar" Tag="VideoSettings"
                              Click="TopBarRadio_OnClick" Content="{loc:T category.dolphin}"/>
                 <RadioButton Classes="TopBar" Tag="OtherSettings" 

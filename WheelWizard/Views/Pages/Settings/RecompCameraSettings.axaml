@@ -1,0 +1,57 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:components="clr-namespace:WheelWizard.Views.Components"
+             mc:Ignorable="d" d:DesignWidth="444" d:DesignHeight="716"
+             x:Class="WheelWizard.Views.Pages.Settings.RecompCameraSettings">
+    <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="0,15,0,0">
+            <StackPanel x:Name="CameraSection" Margin="0,0,0,7" Spacing="4">
+                <components:FormFieldLabel Text="Camera" />
+                <TextBlock Classes="TinyText" TextWrapping="Wrap" Margin="0,0,0,6" Text="Changes apply on the next launch." />
+                <Border Classes="SettingsBlockStyle SettingsRowStyle SettingsRowTop">
+                    <Grid ColumnDefinitions="*,Auto" MinHeight="40">
+                        <StackPanel Margin="0,0,12,0" Spacing="3" VerticalAlignment="Center">
+                            <TextBlock Classes="BodyText" TextWrapping="Wrap" Text="Camera" />
+                            <TextBlock Classes="TinyText" TextWrapping="Wrap" Text="Use the chase camera or sit in the driver’s position." />
+                        </StackPanel>
+                        <ComboBox Grid.Column="1" x:Name="VrCameraDropdown" Width="150"
+                                   HorizontalAlignment="Right" VerticalAlignment="Center" />
+                    </Grid>
+                </Border>
+                <Border Classes="SettingsBlockStyle SettingsRowStyle SettingsRowMiddle">
+                    <Grid ColumnDefinitions="*,Auto" MinHeight="40">
+                        <StackPanel Margin="0,0,12,0" Spacing="3" VerticalAlignment="Center">
+                            <TextBlock Classes="BodyText" TextWrapping="Wrap" Text="Follow kart rotation" />
+                            <TextBlock Classes="TinyText" TextWrapping="Wrap" Text="In first person, follow turning only, turning and pitch, or all kart rotation." />
+                        </StackPanel>
+                        <ComboBox Grid.Column="1" x:Name="VrRotationDropdown" Width="150"
+                                   HorizontalAlignment="Right" VerticalAlignment="Center" />
+                    </Grid>
+                </Border>
+                <Border Classes="SettingsBlockStyle SettingsRowStyle SettingsRowMiddle">
+                    <Grid ColumnDefinitions="*,Auto" MinHeight="40">
+                        <StackPanel Margin="0,0,12,0" Spacing="3" VerticalAlignment="Center">
+                            <TextBlock Classes="BodyText" TextWrapping="Wrap" Text="Hide driver" />
+                            <TextBlock Classes="TinyText" TextWrapping="Wrap" Text="Hide the driver model in first person." />
+                        </StackPanel>
+                        <CheckBox Grid.Column="1" x:Name="VrHideDriver" Classes="SwitchDark"
+                                   HorizontalAlignment="Right" VerticalAlignment="Center" />
+                    </Grid>
+                </Border>
+                <Border Classes="SettingsBlockStyle SettingsRowStyle SettingsRowBottom">
+                    <Grid ColumnDefinitions="*,Auto" MinHeight="40">
+                        <StackPanel Margin="0,0,12,0" Spacing="3" VerticalAlignment="Center">
+                            <TextBlock Classes="BodyText" TextWrapping="Wrap" Text="Hand steering" />
+                            <TextBlock Classes="TinyText" TextWrapping="Wrap" Text="In first person, squeeze a grip near the steering wheel or handlebar to grab it with your VR controllers, and turn it to steer. Hand steering by heurazy." />
+                        </StackPanel>
+                        <CheckBox Grid.Column="1" x:Name="VrHandSteering" Classes="SwitchDark"
+                                   HorizontalAlignment="Right" VerticalAlignment="Center" />
+                    </Grid>
+                </Border>
+            </StackPanel>
+            <Border Classes="SettingsBottomSpacer" />
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>
