@@ -6,7 +6,7 @@ namespace WheelWizard.Settings.Types;
 /// <summary>
 /// A setting stored in the recomp's own <c>Config.toml</c>, which Wheel Wizard shares with the
 /// in-game settings bar. Values are formatted exactly the way the runtime's own writer formats
-/// them: booleans bare and lowercase, strings double-quoted, numbers invariant.
+/// them: booleans bare and lowercase, strings double-quoted, numbers invariant, integers whole.
 /// </summary>
 public class RecompSetting : Setting
 {
@@ -76,6 +76,9 @@ public class RecompSetting : Setting
             { } t when t == typeof(bool) => bool.TryParse(literal, out var flag) && Set(flag, skipSave),
             { } t when t == typeof(double) => double.TryParse(literal, NumberStyles.Float, CultureInfo.InvariantCulture, out var number)
                 && Set(number, skipSave),
+            // The runtime reads these as TOML integers, so a float literal is refused as it is there.
+            { } t when t == typeof(int) => int.TryParse(literal, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var whole)
+                && Set(whole, skipSave),
             _ => throw new InvalidOperationException($"Unsupported type: {ValueType.Name}"),
         };
     }

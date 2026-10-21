@@ -282,6 +282,61 @@ public sealed class RecompVrTests : IDisposable
     }
 
     [Fact]
+    public void CameraSettingsReadAsTheRuntimeDoes()
+    {
+        var selection = new RecompBackendSelection();
+        selection.Restore(false, true);
+        var vr = selection.ConfigPath;
+        // runtime_config.h discards a value outside its range or names, and an integer key written
+        // as a float, and falls back to its default: the launcher must show that same default.
+        Write(
+            vr,
+            "[vr]\nenabled = true\nflat_screen = true\nlean_back_degrees = 60.0\nbullet_bill_camera = \"sideways\"\n"
+                + "first_person_hidden_model = -1.0\nfirst_person_seat = \"custom\"\nwheel_kart_degrees = 120\n"
+                + "cockpit_item_hand = \"off\"\ncockpit_item_size = 0.3\n"
+        );
+        var manager = new RecompSettingManager(_fs, selection);
+        var settings = new SettingsManager(
+            Substitute.For<IWhWzSettingManager>(),
+            Substitute.For<IDolphinSettingManager>(),
+            manager,
+            _fs,
+            selection
+        );
+        manager.LoadSettings();
+        Assert.True(settings.Get<bool>(settings.RECOMP_VR_FLAT_SCREEN));
+        Assert.False(settings.Get<bool>(settings.RECOMP_VR_IMMERSIVE_WINDOW));
+        Assert.True(settings.Get<bool>(settings.RECOMP_VR_FLAT_RACE_INTRO));
+        Assert.Equal(0.0, settings.Get<double>(settings.RECOMP_VR_LEAN_BACK_DEGREES));
+        Assert.Equal("inside", settings.Get<string>(settings.RECOMP_VR_BULLET_BILL_CAMERA));
+        Assert.Equal(0, settings.Get<int>(settings.RECOMP_VR_FIRST_PERSON_HIDDEN_MODEL));
+        Assert.Equal("custom", settings.Get<string>(settings.RECOMP_VR_FIRST_PERSON_SEAT));
+        Assert.True(settings.Get<bool>(settings.RECOMP_VR_BODY_IK));
+        Assert.False(settings.Get<bool>(settings.RECOMP_VR_BODY_IK_HANDS_ONLY));
+        Assert.Equal(90.0, settings.Get<double>(settings.RECOMP_VR_BODY_IK_LEFT_HAND_ROLL));
+        Assert.Equal(-90.0, settings.Get<double>(settings.RECOMP_VR_BODY_IK_RIGHT_HAND_ROLL));
+        Assert.False(settings.Get<bool>(settings.RECOMP_VR_PLACEHOLDER_STEERING_WHEEL));
+        Assert.Equal(120.0, settings.Get<double>(settings.RECOMP_VR_WHEEL_KART_DEGREES));
+        Assert.Equal(45.0, settings.Get<double>(settings.RECOMP_VR_WHEEL_BIKE_DEGREES));
+        Assert.Equal("off", settings.Get<string>(settings.RECOMP_VR_COCKPIT_ITEM_HAND));
+        Assert.True(settings.Get<bool>(settings.RECOMP_VR_COCKPIT_ITEM_THROW));
+        Assert.Equal(0.3, settings.Get<double>(settings.RECOMP_VR_COCKPIT_ITEM_SIZE));
+
+        // Written as the runtime's own writer would: the model a whole TOML integer.
+        settings.Set(settings.RECOMP_VR_FIRST_PERSON_HIDDEN_MODEL, -1);
+        settings.Set(settings.RECOMP_VR_LEAN_BACK_DEGREES, -12.0);
+        settings.Set(settings.RECOMP_VR_COCKPIT_ITEM_SIZE, 0.28);
+        Assert.False(settings.Set(settings.RECOMP_VR_WHEEL_BIKE_DEGREES, 200.0));
+        var saved = _fs.File.ReadAllText(vr);
+        Assert.Contains("first_person_hidden_model = -1" + Environment.NewLine, saved);
+        Assert.Contains("lean_back_degrees = -12.0", saved);
+        Assert.Contains("cockpit_item_size = 0.28", saved);
+        Assert.DoesNotContain("wheel_bike_degrees", saved);
+        manager.ReloadSettings();
+        Assert.Equal(-1, settings.Get<int>(settings.RECOMP_VR_FIRST_PERSON_HIDDEN_MODEL));
+    }
+
+    [Fact]
     public void SwitchingConfigsResetsMissingSettingsWithoutWritingDefaults()
     {
         if (!OperatingSystem.IsWindows())

@@ -73,6 +73,23 @@ public interface ISettingsProperties
     Setting RECOMP_VR_HIDE_DRIVER { get; }
     Setting RECOMP_VR_HAND_STEERING { get; }
     Setting RECOMP_VR_RENDER_SCALE { get; }
+    Setting RECOMP_VR_FLAT_SCREEN { get; }
+    Setting RECOMP_VR_IMMERSIVE_WINDOW { get; }
+    Setting RECOMP_VR_FLAT_RACE_INTRO { get; }
+    Setting RECOMP_VR_LEAN_BACK_DEGREES { get; }
+    Setting RECOMP_VR_BULLET_BILL_CAMERA { get; }
+    Setting RECOMP_VR_FIRST_PERSON_HIDDEN_MODEL { get; }
+    Setting RECOMP_VR_FIRST_PERSON_SEAT { get; }
+    Setting RECOMP_VR_BODY_IK { get; }
+    Setting RECOMP_VR_BODY_IK_HANDS_ONLY { get; }
+    Setting RECOMP_VR_BODY_IK_LEFT_HAND_ROLL { get; }
+    Setting RECOMP_VR_BODY_IK_RIGHT_HAND_ROLL { get; }
+    Setting RECOMP_VR_PLACEHOLDER_STEERING_WHEEL { get; }
+    Setting RECOMP_VR_WHEEL_KART_DEGREES { get; }
+    Setting RECOMP_VR_WHEEL_BIKE_DEGREES { get; }
+    Setting RECOMP_VR_COCKPIT_ITEM_HAND { get; }
+    Setting RECOMP_VR_COCKPIT_ITEM_THROW { get; }
+    Setting RECOMP_VR_COCKPIT_ITEM_SIZE { get; }
 }
 
 public interface ISettingsManager : ISettingsProperties

@@ -187,6 +187,29 @@ public class SettingsManager : ISettingsManager
         // the stick keeps steering until a grip takes hold of the wheel.
         RECOMP_VR_HAND_STEERING = RegisterRecomp(("vr", "hand_steering"), true);
         RECOMP_VR_RENDER_SCALE = RegisterRecomp(("vr", "render_scale"), 1.0);
+        // The rest of the race camera, as runtime_config.h reads it: the same defaults, and a value
+        // outside the range or the names it accepts keeps the default, as the runtime discards it.
+        RECOMP_VR_FLAT_SCREEN = RegisterRecomp(("vr", "flat_screen"), false);
+        RECOMP_VR_IMMERSIVE_WINDOW = RegisterRecomp(("vr", "immersive_window"), false);
+        RECOMP_VR_FLAT_RACE_INTRO = RegisterRecomp(("vr", "flat_race_intro"), true);
+        RECOMP_VR_LEAN_BACK_DEGREES = RegisterRecomp(("vr", "lean_back_degrees"), 0.0, InRange(-45.0, 45.0));
+        RECOMP_VR_BULLET_BILL_CAMERA = RegisterRecomp(("vr", "bullet_bill_camera"), "inside", OneOf("inside", "game"));
+        RECOMP_VR_FIRST_PERSON_HIDDEN_MODEL = RegisterRecomp(
+            ("vr", "first_person_hidden_model"),
+            0,
+            value => value is int model && model >= -1 && model <= 31
+        );
+        RECOMP_VR_FIRST_PERSON_SEAT = RegisterRecomp(("vr", "first_person_seat"), "cockpit", OneOf("cockpit", "custom"));
+        RECOMP_VR_BODY_IK = RegisterRecomp(("vr", "body_ik"), true);
+        RECOMP_VR_BODY_IK_HANDS_ONLY = RegisterRecomp(("vr", "body_ik_hands_only"), false);
+        RECOMP_VR_BODY_IK_LEFT_HAND_ROLL = RegisterRecomp(("vr", "body_ik_left_hand_roll"), 90.0, InRange(-180.0, 180.0));
+        RECOMP_VR_BODY_IK_RIGHT_HAND_ROLL = RegisterRecomp(("vr", "body_ik_right_hand_roll"), -90.0, InRange(-180.0, 180.0));
+        RECOMP_VR_PLACEHOLDER_STEERING_WHEEL = RegisterRecomp(("vr", "placeholder_steering_wheel"), false);
+        RECOMP_VR_WHEEL_KART_DEGREES = RegisterRecomp(("vr", "wheel_kart_degrees"), 90.0, InRange(20.0, 180.0));
+        RECOMP_VR_WHEEL_BIKE_DEGREES = RegisterRecomp(("vr", "wheel_bike_degrees"), 45.0, InRange(20.0, 180.0));
+        RECOMP_VR_COCKPIT_ITEM_HAND = RegisterRecomp(("vr", "cockpit_item_hand"), "left", OneOf("left", "right", "off"));
+        RECOMP_VR_COCKPIT_ITEM_THROW = RegisterRecomp(("vr", "cockpit_item_throw"), true);
+        RECOMP_VR_COCKPIT_ITEM_SIZE = RegisterRecomp(("vr", "cockpit_item_size"), 0.28, InRange(0.05, 0.60));
         // The Wii data folder the runtime should use, written by RecompDolphinDataService after an
         // install and whenever the sharing choice changes. Empty/absent means the runtime's private NAND.
         RECOMP_NAND_ROOT = RegisterRecomp(("paths", "nand_root"), "");
@@ -273,6 +296,23 @@ public class SettingsManager : ISettingsManager
     public Setting RECOMP_VR_HIDE_DRIVER { get; }
     public Setting RECOMP_VR_HAND_STEERING { get; }
     public Setting RECOMP_VR_RENDER_SCALE { get; }
+    public Setting RECOMP_VR_FLAT_SCREEN { get; }
+    public Setting RECOMP_VR_IMMERSIVE_WINDOW { get; }
+    public Setting RECOMP_VR_FLAT_RACE_INTRO { get; }
+    public Setting RECOMP_VR_LEAN_BACK_DEGREES { get; }
+    public Setting RECOMP_VR_BULLET_BILL_CAMERA { get; }
+    public Setting RECOMP_VR_FIRST_PERSON_HIDDEN_MODEL { get; }
+    public Setting RECOMP_VR_FIRST_PERSON_SEAT { get; }
+    public Setting RECOMP_VR_BODY_IK { get; }
+    public Setting RECOMP_VR_BODY_IK_HANDS_ONLY { get; }
+    public Setting RECOMP_VR_BODY_IK_LEFT_HAND_ROLL { get; }
+    public Setting RECOMP_VR_BODY_IK_RIGHT_HAND_ROLL { get; }
+    public Setting RECOMP_VR_PLACEHOLDER_STEERING_WHEEL { get; }
+    public Setting RECOMP_VR_WHEEL_KART_DEGREES { get; }
+    public Setting RECOMP_VR_WHEEL_BIKE_DEGREES { get; }
+    public Setting RECOMP_VR_COCKPIT_ITEM_HAND { get; }
+    public Setting RECOMP_VR_COCKPIT_ITEM_THROW { get; }
+    public Setting RECOMP_VR_COCKPIT_ITEM_SIZE { get; }
     #endregion
 
     #region Public API
@@ -400,5 +440,10 @@ public class SettingsManager : ISettingsManager
         _recompSettingManager.RegisterSetting(setting);
         return setting;
     }
+
+    private static Func<object?, bool> InRange(double low, double high) =>
+        value => value is double number && number >= low && number <= high;
+
+    private static Func<object?, bool> OneOf(params string[] names) => value => value is string name && names.Contains(name);
     #endregion
 }
