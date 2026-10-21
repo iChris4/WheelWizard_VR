@@ -337,6 +337,27 @@ public sealed class RecompVrTests : IDisposable
     }
 
     [Fact]
+    public void ResettingVrSettingsRemovesOnlyTheirKeysWithTheirComments()
+    {
+        var selection = new RecompBackendSelection();
+        selection.Restore(false, true);
+        var vr = selection.ConfigPath;
+        Write(
+            vr,
+            "[vr]\nenabled = false\ncontroller_mode = \"gamepad\"\n# Race view\n# Live.\nflat_screen = true\n"
+                + "first_person_seat = \"custom\"\n# Kept\nworld_units_per_meter = 400.0\nfirst_person = true\n\n"
+                + "[video]\nrender_scale = 2.0\n"
+        );
+        var manager = new RecompSettingManager(_fs, selection);
+        manager.RemoveTomlSettings("vr", RecompVrConfig.PreferenceKeys);
+        // As the runtime's toml11 writer removes a key's comments with it; other sections keep theirs.
+        Assert.Equal(
+            "[vr]\nenabled = false\ncontroller_mode = \"gamepad\"\n# Kept\nworld_units_per_meter = 400.0\n\n[video]\nrender_scale = 2.0\n",
+            _fs.File.ReadAllText(vr).ReplaceLineEndings("\n")
+        );
+    }
+
+    [Fact]
     public void SwitchingConfigsResetsMissingSettingsWithoutWritingDefaults()
     {
         if (!OperatingSystem.IsWindows())

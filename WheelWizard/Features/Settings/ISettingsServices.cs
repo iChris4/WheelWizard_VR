@@ -29,6 +29,13 @@ public interface IRecompSettingManager
     /// comment, and ordering untouched. A missing file or key is a no-op.
     /// </summary>
     void RemoveTomlSetting(string section, string settingToRemove);
+
+    /// <summary>
+    /// Deletes these keys from one section in a single write, each with the comment lines directly
+    /// above it, which the runtime's toml11 writer attaches to the key and removes with it. Every other
+    /// key and comment stays. A missing file, section or key is a no-op.
+    /// </summary>
+    void RemoveTomlSettings(string section, IReadOnlyCollection<string> settingsToRemove);
 }
 
 public interface ISettingsProperties

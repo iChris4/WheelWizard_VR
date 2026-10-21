@@ -10,27 +10,7 @@
             <StackPanel x:Name="CameraSection" Margin="0,0,0,7" Spacing="4">
                 <components:FormFieldLabel Text="Camera" />
                 <TextBlock Classes="TinyText" TextWrapping="Wrap" Margin="0,0,0,6" Text="Changes apply on the next launch." />
-                <Border x:Name="RaceViewRow" Classes="SettingsBlockStyle SettingsRowStyle SettingsRowTop">
-                    <Grid ColumnDefinitions="*,Auto" MinHeight="40">
-                        <StackPanel Margin="0,0,12,0" Spacing="3" VerticalAlignment="Center">
-                            <TextBlock Classes="BodyText" TextWrapping="Wrap" Text="Race view" />
-                            <TextBlock Classes="TinyText" TextWrapping="Wrap" Text="Immersive plays races all around you in stereo. Immersive window keeps that stereo view but shows it only through a window where the menu screen sits. Flat screen plays races on the menu screen; the camera settings below do not apply to it." />
-                        </StackPanel>
-                        <ComboBox Grid.Column="1" x:Name="RaceViewDropdown" Width="150"
-                                  HorizontalAlignment="Right" VerticalAlignment="Center" />
-                    </Grid>
-                </Border>
-                <Border x:Name="RaceIntroRow" Classes="SettingsBlockStyle SettingsRowStyle SettingsRowMiddle">
-                    <Grid ColumnDefinitions="*,Auto" MinHeight="40">
-                        <StackPanel Margin="0,0,12,0" Spacing="3" VerticalAlignment="Center">
-                            <TextBlock Classes="BodyText" TextWrapping="Wrap" Text="Race intro" />
-                            <TextBlock Classes="TinyText" TextWrapping="Wrap" Text="How each race's intro, the course preview before the countdown, is shown. Flat screen plays it on the menu screen, and the race turns immersive at the countdown, as the cockpit camera takes over. Immersive shows it as the race view does." />
-                        </StackPanel>
-                        <ComboBox Grid.Column="1" x:Name="RaceIntroDropdown" Width="150"
-                                  HorizontalAlignment="Right" VerticalAlignment="Center" />
-                    </Grid>
-                </Border>
-                <Border x:Name="LeanBackRow" Classes="SettingsBlockStyle SettingsRowStyle SettingsRowMiddle">
+                <Border x:Name="LeanBackRow" Classes="SettingsBlockStyle SettingsRowStyle SettingsRowTop">
                     <Grid ColumnDefinitions="*,Auto" MinHeight="40">
                         <StackPanel Margin="0,0,12,0" Spacing="3" VerticalAlignment="Center">
                             <TextBlock Classes="BodyText" TextWrapping="Wrap" Text="Lean back angle" />

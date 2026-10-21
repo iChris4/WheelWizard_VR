@@ -83,6 +83,41 @@ public class RecompSettingManager(IFileSystem fileSystem, WheelWizard.Recomp.Rec
         }
     }
 
+    public void RemoveTomlSettings(string section, IReadOnlyCollection<string> settingsToRemove)
+    {
+        lock (_fileIoSync)
+        {
+            var lines = ReadTomlFile()?.ToList();
+            if (lines == null)
+                return;
+
+            var sectionIndex = lines.FindIndex(line => line.Trim() == $"[{section}]");
+            if (sectionIndex == -1)
+                return;
+
+            var removed = false;
+            for (var i = sectionIndex + 1; i < lines.Count; i++)
+            {
+                var trimmed = lines[i].Trim();
+                if (trimmed.StartsWith('[') && trimmed.EndsWith(']'))
+                    break; // Next section reached.
+
+                if (!settingsToRemove.Any(setting => IsSettingLine(trimmed, setting)))
+                    continue;
+
+                var first = i;
+                while (first > sectionIndex + 1 && lines[first - 1].TrimStart().StartsWith('#'))
+                    first--;
+                lines.RemoveRange(first, i - first + 1);
+                i = first - 1;
+                removed = true;
+            }
+
+            if (removed)
+                fileSystem.File.WriteAllLines(ConfigPath, lines);
+        }
+    }
+
     public void LoadSettings()
     {
         List<RecompSetting> settingsSnapshot;

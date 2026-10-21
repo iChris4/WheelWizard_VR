@@ -52,6 +52,21 @@ public partial class RecompSettings : UserControlBase
             SaveVrSetting(SettingsService.RECOMP_VR_ENABLED, VrEnabled.IsChecked == true);
             RefreshGraphicsApiAvailability();
         };
+        VrRaceViewDropdown.SelectionChanged += (_, _) =>
+        {
+            // One setting in two keys, as runtime_config.h's VrRaceView reads them.
+            var view = VrRaceViewDropdown.SelectedIndex;
+            if (view >= 0)
+                SaveVrSettings(
+                    (SettingsService.RECOMP_VR_FLAT_SCREEN, view == FlatScreenRaceView),
+                    (SettingsService.RECOMP_VR_IMMERSIVE_WINDOW, view == ImmersiveWindowRaceView)
+                );
+        };
+        VrRaceIntroDropdown.SelectionChanged += (_, _) =>
+        {
+            if (VrRaceIntroDropdown.SelectedIndex >= 0)
+                SaveVrSetting(SettingsService.RECOMP_VR_FLAT_RACE_INTRO, VrRaceIntroDropdown.SelectedIndex == 1);
+        };
         VrMirrorDropdown.SelectionChanged += (_, _) => SaveVrChoice(SettingsService.RECOMP_VR_MIRROR_VIEW, VrMirrorDropdown, MirrorValues);
         VrRenderScaleDropdown.SelectionChanged += (_, _) =>
         {
@@ -132,6 +147,10 @@ public partial class RecompSettings : UserControlBase
 
     private static readonly string[] MirrorValues = ["normal", "both", "left", "right", "none"];
 
+    // Race view choices, in the order the dropdown lists them.
+    private const int ImmersiveWindowRaceView = 1;
+    private const int FlatScreenRaceView = 2;
+
     // The race camera rows live on their own tab, RecompCameraSettings.
     private void LoadVrSettings()
     {
@@ -140,6 +159,15 @@ public partial class RecompSettings : UserControlBase
         if (!VrSection.IsVisible)
             return;
         VrEnabled.IsChecked = SettingsService.Get<bool>(SettingsService.RECOMP_VR_ENABLED);
+        VrRaceViewDropdown.ItemsSource = new[] { "Immersive", "Immersive window", "Flat screen" };
+        // Flat Screen mode wins over the immersive window, as in runtime_config.h's VrRaceView.
+        VrRaceViewDropdown.SelectedIndex =
+            SettingsService.Get<bool>(SettingsService.RECOMP_VR_FLAT_SCREEN) ? FlatScreenRaceView
+            : SettingsService.Get<bool>(SettingsService.RECOMP_VR_IMMERSIVE_WINDOW) ? ImmersiveWindowRaceView
+            : 0;
+        VrRaceIntroDropdown.ItemsSource = new[] { "Immersive", "Flat screen" };
+        VrRaceIntroDropdown.SelectedIndex = SettingsService.Get<bool>(SettingsService.RECOMP_VR_FLAT_RACE_INTRO) ? 1 : 0;
+        RefreshRaceIntroRow();
         VrMirrorDropdown.ItemsSource = new[] { "Normal game", "Both eyes", "Left eye", "Right eye", "Black screen" };
         VrMirrorDropdown.SelectedIndex = Array.IndexOf(MirrorValues, SettingsService.Get<string>(SettingsService.RECOMP_VR_MIRROR_VIEW));
         // A scale set outside WheelWizard (the in-game panel takes any number) joins the list rather
@@ -156,7 +184,12 @@ public partial class RecompSettings : UserControlBase
             SaveVrSetting(setting, values[dropdown.SelectedIndex]);
     }
 
-    private void SaveVrSetting(Setting setting, object value)
+    // Flat Screen mode keeps the whole race on the menu screen, its intro included.
+    private void RefreshRaceIntroRow() => VrRaceIntroRow.IsEnabled = VrRaceViewDropdown.SelectedIndex != FlatScreenRaceView;
+
+    private void SaveVrSetting(Setting setting, object value) => SaveVrSettings((setting, value));
+
+    private void SaveVrSettings(params (Setting Setting, object Value)[] values)
     {
         if (_loading || RecompEnvironment?.Backend.Kind != RecompBackendKind.OpenXR || !IsInstalled)
             return;
@@ -167,7 +200,41 @@ public partial class RecompSettings : UserControlBase
             LoadSettings();
             return;
         }
-        SettingsService.Set(setting, value);
+        foreach (var (setting, value) in values)
+            SettingsService.Set(setting, value);
+        RefreshRaceIntroRow();
+    }
+
+    /// <summary>
+    /// Every VR and Camera setting back to its default, as the in-game panel's Reset VR settings does:
+    /// the keys leave Config.toml, so the game reads its own defaults, and the rows read them back.
+    /// </summary>
+    private async void ResetVrSettings_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (RecompEnvironment?.Backend.Kind != RecompBackendKind.OpenXR || !IsInstalled)
+            return;
+        var confirmed = await new YesNoWindow()
+            .SetMainText("Reset VR settings?")
+            .SetExtraText(
+                "Every VR and Camera setting goes back to its default, those only the in-game settings show included. Enable OpenXR keeps its choice."
+            )
+            .SetButtonText("Reset", t("action.cancel"))
+            .SetButtonVariants(
+                WheelWizard.Views.Components.Button.ButtonsVariantType.Warning,
+                WheelWizard.Views.Components.Button.ButtonsVariantType.Default
+            )
+            .AwaitAnswer();
+        if (!confirmed)
+            return;
+        using (var operation = TryAcquireSharedData())
+        {
+            if (operation is null)
+                return;
+            RecompSettingsFile.RemoveTomlSettings("vr", RecompVrConfig.PreferenceKeys);
+        }
+        RecompSettingsFile.ReloadSettings();
+        LoadSettings();
+        ViewUtils.ShowSnackbar("VR settings reset to their defaults.");
     }
 
     #region WiiCompiled video settings

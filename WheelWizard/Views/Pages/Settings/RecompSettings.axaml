@@ -137,6 +137,26 @@
                 <Border Classes="SettingsBlockStyle SettingsRowStyle SettingsRowMiddle">
                     <Grid ColumnDefinitions="*,Auto" MinHeight="40">
                         <StackPanel Margin="0,0,12,0" Spacing="3" VerticalAlignment="Center">
+                            <TextBlock Classes="BodyText" TextWrapping="Wrap" Text="Race view" />
+                            <TextBlock Classes="TinyText" TextWrapping="Wrap" Text="Immersive plays races all around you in stereo. Immersive window keeps that stereo view but shows it only through a window where the menu screen sits. Flat screen plays races on the menu screen; the Camera tab's settings do not apply to it." />
+                        </StackPanel>
+                        <ComboBox Grid.Column="1" x:Name="VrRaceViewDropdown" Width="150"
+                                   HorizontalAlignment="Right" VerticalAlignment="Center" />
+                    </Grid>
+                </Border>
+                <Border x:Name="VrRaceIntroRow" Classes="SettingsBlockStyle SettingsRowStyle SettingsRowMiddle">
+                    <Grid ColumnDefinitions="*,Auto" MinHeight="40">
+                        <StackPanel Margin="0,0,12,0" Spacing="3" VerticalAlignment="Center">
+                            <TextBlock Classes="BodyText" TextWrapping="Wrap" Text="Race intro" />
+                            <TextBlock Classes="TinyText" TextWrapping="Wrap" Text="How each race's intro, the course preview before the countdown, is shown. Flat screen plays it on the menu screen, and the race turns immersive at the countdown, as the cockpit camera takes over. Immersive shows it as the race view does." />
+                        </StackPanel>
+                        <ComboBox Grid.Column="1" x:Name="VrRaceIntroDropdown" Width="150"
+                                   HorizontalAlignment="Right" VerticalAlignment="Center" />
+                    </Grid>
+                </Border>
+                <Border Classes="SettingsBlockStyle SettingsRowStyle SettingsRowMiddle">
+                    <Grid ColumnDefinitions="*,Auto" MinHeight="40">
+                        <StackPanel Margin="0,0,12,0" Spacing="3" VerticalAlignment="Center">
                             <TextBlock Classes="BodyText" TextWrapping="Wrap" Text="Desktop view" />
                             <TextBlock Classes="TinyText" TextWrapping="Wrap" Text="Choose what the desktop window shows while the headset is running." />
                         </StackPanel>
@@ -144,7 +164,7 @@
                                    HorizontalAlignment="Right" VerticalAlignment="Center" />
                     </Grid>
                 </Border>
-                <Border Classes="SettingsBlockStyle SettingsRowStyle SettingsRowBottom">
+                <Border Classes="SettingsBlockStyle SettingsRowStyle SettingsRowMiddle">
                     <Grid ColumnDefinitions="*,Auto" MinHeight="40">
                         <StackPanel Margin="0,0,12,0" Spacing="3" VerticalAlignment="Center">
                             <TextBlock Classes="BodyText" TextWrapping="Wrap" Text="Headset render scale" />
@@ -152,6 +172,23 @@
                         </StackPanel>
                         <ComboBox Grid.Column="1" x:Name="VrRenderScaleDropdown" Width="150"
                                    HorizontalAlignment="Right" VerticalAlignment="Center" />
+                    </Grid>
+                </Border>
+                <Border Classes="SettingsBlockStyle SettingsRowStyle SettingsRowBottom">
+                    <Grid ColumnDefinitions="*,Auto" MinHeight="40">
+                        <StackPanel Margin="0,0,12,0" Spacing="3" VerticalAlignment="Center">
+                            <TextBlock Classes="BodyText" TextWrapping="Wrap" Text="Reset VR settings" />
+                            <TextBlock Classes="TinyText" TextWrapping="Wrap" Text="Puts every setting on this tab's Virtual reality rows and the Camera tab back to its default, with those only the in-game settings show. Enable OpenXR keeps its choice." />
+                        </StackPanel>
+                        <components:Button Grid.Column="1"
+                                           x:Name="ResetVrSettingsButton"
+                                           Variant="Default"
+                                           ButtonSize="Compact"
+                                           Text="Reset"
+                                           IconData="{StaticResource RotateLeft}"
+                                           HorizontalAlignment="Right"
+                                           VerticalAlignment="Center"
+                                           Click="ResetVrSettings_OnClick" />
                     </Grid>
                 </Border>
             </StackPanel>

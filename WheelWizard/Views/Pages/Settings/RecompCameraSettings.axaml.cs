@@ -11,19 +11,13 @@ namespace WheelWizard.Views.Pages.Settings;
 
 /// <summary>
 /// The OpenXR VR race camera, on its own tab as in the game's own settings panel, with the rows of
-/// the Quest launcher's Camera tab (tracked hands are Quest-only). Like the OpenXR VR tab, it writes
-/// the VR installation's Config.toml, and only once that installation exists. A row is greyed out
-/// while the choices above it leave it nothing to do, as on the Quest.
+/// the Quest launcher's Camera tab (tracked hands are Quest-only); the race view and its intro are on
+/// the OpenXR VR tab, as there. Like that tab, it writes the VR installation's Config.toml, and only
+/// once that installation exists. A row is greyed out while the choices above it, or the race view,
+/// leave it nothing to do, as on the Quest.
 /// </summary>
 public partial class RecompCameraSettings : UserControlBase
 {
-    private enum RaceView
-    {
-        Immersive,
-        ImmersiveWindow,
-        FlatScreen,
-    }
-
     private enum Hiding
     {
         Nothing,
@@ -76,21 +70,6 @@ public partial class RecompCameraSettings : UserControlBase
         LoadSettings();
 
         // Attached after loading, so populating a control never writes it straight back.
-        RaceViewDropdown.SelectionChanged += (_, _) =>
-        {
-            // One setting in two keys, as runtime_config.h's VrRaceView reads them.
-            var view = (RaceView)RaceViewDropdown.SelectedIndex;
-            if (RaceViewDropdown.SelectedIndex >= 0)
-                Save(
-                    (SettingsService.RECOMP_VR_FLAT_SCREEN, view == RaceView.FlatScreen),
-                    (SettingsService.RECOMP_VR_IMMERSIVE_WINDOW, view == RaceView.ImmersiveWindow)
-                );
-        };
-        RaceIntroDropdown.SelectionChanged += (_, _) =>
-        {
-            if (RaceIntroDropdown.SelectedIndex >= 0)
-                Save((SettingsService.RECOMP_VR_FLAT_RACE_INTRO, RaceIntroDropdown.SelectedIndex == 1));
-        };
         DefaultCameraDropdown.SelectionChanged += (_, _) =>
         {
             if (DefaultCameraDropdown.SelectedIndex >= 0)
@@ -141,10 +120,6 @@ public partial class RecompCameraSettings : UserControlBase
         try
         {
             CameraSection.IsEnabled = IsVrBackend && IsInstalled;
-            RaceViewDropdown.ItemsSource = new[] { "Immersive", "Immersive window", "Flat screen" };
-            RaceViewDropdown.SelectedIndex = (int)ReadRaceView();
-            RaceIntroDropdown.ItemsSource = new[] { "Immersive", "Flat screen" };
-            RaceIntroDropdown.SelectedIndex = Get<bool>(SettingsService.RECOMP_VR_FLAT_RACE_INTRO) ? 1 : 0;
             DefaultCameraDropdown.ItemsSource = new[] { "Game camera", "First person" };
             DefaultCameraDropdown.SelectedIndex = Get<bool>(SettingsService.RECOMP_VR_FIRST_PERSON) ? 1 : 0;
             BulletBillDropdown.ItemsSource = new[] { "Ride inside", "Game camera" };
@@ -178,12 +153,6 @@ public partial class RecompCameraSettings : UserControlBase
         }
     }
 
-    // Flat Screen mode wins over the immersive window, as in runtime_config.h's VrRaceView.
-    private RaceView ReadRaceView() =>
-        Get<bool>(SettingsService.RECOMP_VR_FLAT_SCREEN) ? RaceView.FlatScreen
-        : Get<bool>(SettingsService.RECOMP_VR_IMMERSIVE_WINDOW) ? RaceView.ImmersiveWindow
-        : RaceView.Immersive;
-
     // One setting in two keys, presented as the in-game panel's two tick boxes are: nothing, the
     // driver (model 0), or every model (-1).
     private Hiding ReadHiding() =>
@@ -202,7 +171,8 @@ public partial class RecompCameraSettings : UserControlBase
 
     private void RefreshDependents()
     {
-        // Flat Screen mode keeps races on the menu screen, which none of the rows below reach.
+        // Flat Screen mode (the OpenXR VR tab's race view) keeps races on the menu screen, which none
+        // of these rows reach.
         var immersive = !Get<bool>(SettingsService.RECOMP_VR_FLAT_SCREEN);
         // first_person is only the camera a race starts on: a click switches any race into first
         // person, so its rows apply whichever default is chosen.
@@ -214,7 +184,6 @@ public partial class RecompCameraSettings : UserControlBase
         var handSteering = cockpit && Get<bool>(SettingsService.RECOMP_VR_HAND_STEERING);
         var itemShown = cockpit && Get<string>(SettingsService.RECOMP_VR_COCKPIT_ITEM_HAND) != "off";
 
-        RaceIntroRow.IsEnabled = immersive;
         LeanBackRow.IsEnabled = immersive;
         DefaultCameraRow.IsEnabled = immersive;
         BulletBillRow.IsEnabled = firstPerson;
