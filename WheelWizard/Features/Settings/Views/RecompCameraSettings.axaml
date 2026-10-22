@@ -5,6 +5,17 @@
              xmlns:components="clr-namespace:WheelWizard.Views.Components"
              mc:Ignorable="d" d:DesignWidth="444" d:DesignHeight="716"
              x:Class="WheelWizard.Settings.Views.RecompCameraSettings">
+    <UserControl.Styles>
+        <!-- A FormFieldLabel that wraps: beside a slider and its value, the window's fixed width
+             leaves a long title too little room, and FormFieldLabel cuts it off. -->
+        <Style Selector="SelectableTextBlock.RowTitle">
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="Foreground" Value="{StaticResource FormFieldLabelColor}" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="Margin" Value="0,2,5,2" />
+        </Style>
+    </UserControl.Styles>
     <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
         <StackPanel Margin="0,10,0,0">
             <StackPanel x:Name="CameraSection">
@@ -177,7 +188,7 @@
                                     Spacing="3"
                                     HorizontalAlignment="Left"
                                     VerticalAlignment="Center">
-                            <components:FormFieldLabel Text="Character hand rotation (left)" />
+                            <SelectableTextBlock Classes="RowTitle" Text="Character hand rotation (left)" />
                             <SelectableTextBlock Classes="TinyText"
                                        Text="Turns the character's hand about your forearm until it sits as you hold the controller. Higher turns it counter-clockwise as you look along your arm. Default 90°."
                                        TextAlignment="Left"
@@ -200,7 +211,7 @@
                                     Spacing="3"
                                     HorizontalAlignment="Left"
                                     VerticalAlignment="Center">
-                            <components:FormFieldLabel Text="Character hand rotation (right)" />
+                            <SelectableTextBlock Classes="RowTitle" Text="Character hand rotation (right)" />
                             <SelectableTextBlock Classes="TinyText"
                                        Text="Turns the character's hand about your forearm until it sits as you hold the controller. Higher turns it counter-clockwise as you look along your arm. Default -90°."
                                        TextAlignment="Left"
@@ -263,7 +274,7 @@
                                     Spacing="3"
                                     HorizontalAlignment="Left"
                                     VerticalAlignment="Center">
-                            <components:FormFieldLabel Text="Hand steering sensitivity (kart)" />
+                            <SelectableTextBlock Classes="RowTitle" Text="Hand steering sensitivity (kart)" />
                             <SelectableTextBlock Classes="TinyText"
                                        Text="How far you turn the kart's wheel with your hands for full steering (default 90°). Lower is more sensitive: less turning. The stick steers as before; at full stick the wheel shows this angle. Needs Hand steering."
                                        TextAlignment="Left"
@@ -286,7 +297,7 @@
                                     Spacing="3"
                                     HorizontalAlignment="Left"
                                     VerticalAlignment="Center">
-                            <components:FormFieldLabel Text="Hand steering sensitivity (bike)" />
+                            <SelectableTextBlock Classes="RowTitle" Text="Hand steering sensitivity (bike)" />
                             <SelectableTextBlock Classes="TinyText"
                                        Text="How far you turn the bike's handlebar with your hands for full steering (default 45°). Lower is more sensitive: less turning. The stick steers as before; at full stick the handlebar shows this angle. Needs Hand steering."
                                        TextAlignment="Left"
