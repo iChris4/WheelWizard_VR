@@ -267,7 +267,7 @@ public class SettingsManager : ISettingsManager, IDisposable
         // Managed VR installations enable OpenXR initially; explicit desktop choices are retained.
         RECOMP_VR_ENABLED = RegisterRecomp(("vr", "enabled"), true);
         RECOMP_VR_MIRROR_VIEW = RegisterRecomp(("vr", "mirror_view"), "normal");
-        RECOMP_VR_FIRST_PERSON = RegisterRecomp(("vr", "first_person"), false);
+        RECOMP_VR_FIRST_PERSON = RegisterRecomp(("vr", "first_person"), true);
         RECOMP_VR_FIRST_PERSON_ROTATION = RegisterRecomp(("vr", "first_person_rotation"), "yaw_pitch");
         RECOMP_VR_HIDE_DRIVER = RegisterRecomp(("vr", "first_person_hide_driver"), true);
         // Hand steering (grab the cockpit's wheel with the VR controllers), by heurazy. On in game too:
@@ -280,7 +280,7 @@ public class SettingsManager : ISettingsManager, IDisposable
         RECOMP_VR_IMMERSIVE_WINDOW = RegisterRecomp(("vr", "immersive_window"), false);
         RECOMP_VR_FLAT_RACE_INTRO = RegisterRecomp(("vr", "flat_race_intro"), true);
         RECOMP_VR_LEAN_BACK_DEGREES = RegisterRecomp(("vr", "lean_back_degrees"), 0.0, InRange(-45.0, 45.0));
-        RECOMP_VR_BULLET_BILL_CAMERA = RegisterRecomp(("vr", "bullet_bill_camera"), "inside", OneOf("inside", "game"));
+        RECOMP_VR_BULLET_BILL_CAMERA = RegisterRecomp(("vr", "bullet_bill_camera"), "game", OneOf("inside", "game"));
         RECOMP_VR_FIRST_PERSON_HIDDEN_MODEL = RegisterRecomp(("vr", "first_person_hidden_model"), 0, model => model >= -1 && model <= 31);
         RECOMP_VR_FIRST_PERSON_SEAT = RegisterRecomp(("vr", "first_person_seat"), "cockpit", OneOf("cockpit", "custom"));
         RECOMP_VR_BODY_IK = RegisterRecomp(("vr", "body_ik"), true);
@@ -288,11 +288,11 @@ public class SettingsManager : ISettingsManager, IDisposable
         RECOMP_VR_BODY_IK_LEFT_HAND_ROLL = RegisterRecomp(("vr", "body_ik_left_hand_roll"), 90.0, InRange(-180.0, 180.0));
         RECOMP_VR_BODY_IK_RIGHT_HAND_ROLL = RegisterRecomp(("vr", "body_ik_right_hand_roll"), -90.0, InRange(-180.0, 180.0));
         RECOMP_VR_PLACEHOLDER_STEERING_WHEEL = RegisterRecomp(("vr", "placeholder_steering_wheel"), false);
-        RECOMP_VR_WHEEL_KART_DEGREES = RegisterRecomp(("vr", "wheel_kart_degrees"), 90.0, InRange(20.0, 180.0));
+        RECOMP_VR_WHEEL_KART_DEGREES = RegisterRecomp(("vr", "wheel_kart_degrees"), 45.0, InRange(20.0, 180.0));
         RECOMP_VR_WHEEL_BIKE_DEGREES = RegisterRecomp(("vr", "wheel_bike_degrees"), 45.0, InRange(20.0, 180.0));
-        RECOMP_VR_COCKPIT_ITEM_HAND = RegisterRecomp(("vr", "cockpit_item_hand"), "left", OneOf("left", "right", "off"));
+        RECOMP_VR_COCKPIT_ITEM_HAND = RegisterRecomp(("vr", "cockpit_item_hand"), "right", OneOf("left", "right", "off"));
         RECOMP_VR_COCKPIT_ITEM_THROW = RegisterRecomp(("vr", "cockpit_item_throw"), true);
-        RECOMP_VR_COCKPIT_ITEM_SIZE = RegisterRecomp(("vr", "cockpit_item_size"), 0.28, InRange(0.05, 0.60));
+        RECOMP_VR_COCKPIT_ITEM_SIZE = RegisterRecomp(("vr", "cockpit_item_size"), 0.2, InRange(0.05, 0.60));
         // The Wii data folder the runtime should use, written by RecompDolphinDataService after an
         // install and whenever the sharing choice changes. Empty/absent means the runtime's private NAND.
         RECOMP_NAND_ROOT = RegisterRecomp(("paths", "nand_root"), "");

@@ -276,7 +276,7 @@
                                     VerticalAlignment="Center">
                             <SelectableTextBlock Classes="RowTitle" Text="Hand steering sensitivity (kart)" />
                             <SelectableTextBlock Classes="TinyText"
-                                       Text="How far you turn the kart's wheel with your hands for full steering (default 90°). Lower is more sensitive: less turning. The stick steers as before; at full stick the wheel shows this angle. Needs Hand steering."
+                                       Text="How far you turn the kart's wheel with your hands for full steering (default 45°). Lower is more sensitive: less turning. The stick steers as before; at full stick the wheel shows this angle. Needs Hand steering."
                                        TextAlignment="Left"
                                        TextWrapping="Wrap" />
                         </StackPanel>
@@ -361,7 +361,7 @@
                                     VerticalAlignment="Center">
                             <components:FormFieldLabel Text="Held item size" />
                             <SelectableTextBlock Classes="TinyText"
-                                       Text="How big the item in your hand is, across its largest side. Default 0.28 m."
+                                       Text="How big the item in your hand is, across its largest side. Default 0.2 m."
                                        TextAlignment="Left"
                                        TextWrapping="Wrap" />
                         </StackPanel>

@@ -227,7 +227,7 @@ public sealed class RecompVrTests
         manager.LoadSettings(selection.ConfigPath);
         settings.Set(settings.RECOMP_VR_ENABLED, false);
         settings.Set(settings.RECOMP_VR_MIRROR_VIEW, "both");
-        settings.Set(settings.RECOMP_VR_FIRST_PERSON, true);
+        settings.Set(settings.RECOMP_VR_FIRST_PERSON, false);
         settings.Set(settings.RECOMP_VR_FIRST_PERSON_ROTATION, "full");
         settings.Set(settings.RECOMP_VR_HIDE_DRIVER, false);
         settings.Set(settings.RECOMP_VR_HAND_STEERING, false);
@@ -237,7 +237,7 @@ public sealed class RecompVrTests
         Write(selection.ConfigPath, "[video]\ngraphics_api = \"vulkan\"\n");
         manager.ReloadSettings(selection.ConfigPath);
         Assert.Equal("normal", settings.Get(settings.RECOMP_VR_MIRROR_VIEW));
-        Assert.False(settings.Get(settings.RECOMP_VR_FIRST_PERSON));
+        Assert.True(settings.Get(settings.RECOMP_VR_FIRST_PERSON));
         Assert.Equal("yaw_pitch", settings.Get(settings.RECOMP_VR_FIRST_PERSON_ROTATION));
         Assert.True(settings.Get(settings.RECOMP_VR_HAND_STEERING));
         Assert.Equal(1.0, settings.Get(settings.RECOMP_VR_RENDER_SCALE));
@@ -246,7 +246,7 @@ public sealed class RecompVrTests
         manager.ReloadSettings(selection.ConfigPath);
         Assert.False(settings.Get(settings.RECOMP_VR_ENABLED));
         Assert.Equal("both", settings.Get(settings.RECOMP_VR_MIRROR_VIEW));
-        Assert.True(settings.Get(settings.RECOMP_VR_FIRST_PERSON));
+        Assert.False(settings.Get(settings.RECOMP_VR_FIRST_PERSON));
         Assert.Equal("full", settings.Get(settings.RECOMP_VR_FIRST_PERSON_ROTATION));
         Assert.False(settings.Get(settings.RECOMP_VR_HIDE_DRIVER));
         Assert.False(settings.Get(settings.RECOMP_VR_HAND_STEERING));
@@ -301,7 +301,7 @@ public sealed class RecompVrTests
         Assert.False(settings.Get(settings.RECOMP_VR_IMMERSIVE_WINDOW));
         Assert.True(settings.Get(settings.RECOMP_VR_FLAT_RACE_INTRO));
         Assert.Equal(0.0, settings.Get(settings.RECOMP_VR_LEAN_BACK_DEGREES));
-        Assert.Equal("inside", settings.Get(settings.RECOMP_VR_BULLET_BILL_CAMERA));
+        Assert.Equal("game", settings.Get(settings.RECOMP_VR_BULLET_BILL_CAMERA));
         Assert.Equal(0, settings.Get(settings.RECOMP_VR_FIRST_PERSON_HIDDEN_MODEL));
         Assert.Equal("custom", settings.Get(settings.RECOMP_VR_FIRST_PERSON_SEAT));
         Assert.True(settings.Get(settings.RECOMP_VR_BODY_IK));
