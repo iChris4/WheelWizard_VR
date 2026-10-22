@@ -2,25 +2,24 @@ namespace WheelWizard.Localization;
 
 public static class TranslationFunctions
 {
-#pragma warning disable IDE1006 // Naming Styles
-    public static string t(string key, params object?[] args)
-#pragma warning restore IDE1006 // Naming Styles
+    public static string t(string key, object? args = null)
     {
-        var hasLanguagePrefix = TrySplitLanguageKey(key, out var languageCode, out var translationKey);
-        if (!hasLanguagePrefix)
-            languageCode = LocalizationProvider.Current.CurrentLanguage;
+        var prefixed = TrySplitLanguageKey(key, out var language, out var translationKey);
+        return Format(
+            prefixed ? LocalizationProvider.TranslateForLanguage(translationKey, language) : LocalizationProvider.Translate(translationKey),
+            args
+        );
+    }
 
-        translationKey = ResolveNumberVariant(translationKey, languageCode, args);
-
-        var translated = hasLanguagePrefix
-            ? LocalizationProvider.TranslateForLanguage(translationKey, languageCode)
-            : LocalizationProvider.Translate(translationKey);
-
-        return Format(translated, args);
+    /// <summary>Count selects the plural form; args supplies named placeholders.</summary>
+    public static string t(string key, decimal count, object? args = null)
+    {
+        var prefixed = TrySplitLanguageKey(key, out var language, out var translationKey);
+        return Format(LocalizationProvider.Current.TranslatePlural(translationKey, count, prefixed ? language : null), args, count);
     }
 
 #pragma warning disable IDE1006 // Naming Styles
-    public static string tFormat(string value, params object?[] args) => Format(value, args);
+    public static string tFormat(string value, object? args = null) => Format(value, args);
 
     public static string tTime(int seconds) => tTime(TimeSpan.FromSeconds(seconds));
 
@@ -33,11 +32,11 @@ public static class TranslationFunctions
         {
             var days = timeSpan.Days;
             var hours = timeSpan.Hours;
-            var dayText = t("time.days.n", days);
+            var dayText = t("time.days", count: days);
             if (hours == 0)
                 return dayText;
 
-            var hourText = t("time.hours.n", hours);
+            var hourText = t("time.hours", count: hours);
             return $"{dayText} {hourText}";
         }
 
@@ -45,11 +44,11 @@ public static class TranslationFunctions
         {
             var hours = timeSpan.Hours;
             var minutes = timeSpan.Minutes;
-            var hourText = t("time.hours.n", hours);
+            var hourText = t("time.hours", count: hours);
             if (minutes == 0)
                 return hourText;
 
-            var minuteText = t("time.minutes.n", minutes);
+            var minuteText = t("time.minutes", count: minutes);
             return $"{hourText} {minuteText}";
         }
 
@@ -57,45 +56,15 @@ public static class TranslationFunctions
         {
             var minutes = timeSpan.Minutes;
             var seconds = timeSpan.Seconds;
-            var minuteText = t("time.minutes.n", minutes);
+            var minuteText = t("time.minutes", count: minutes);
             if (seconds == 0)
                 return minuteText;
 
-            var secondText = t("time.seconds.n", seconds);
+            var secondText = t("time.seconds", count: seconds);
             return $"{minuteText} {secondText}";
         }
 
-        return t("time.seconds.n", timeSpan.Seconds);
-    }
-
-    private static string ResolveNumberVariant(string translationKey, string languageCode, object?[] args)
-    {
-        if (!translationKey.EndsWith(".n", StringComparison.Ordinal) || args.Length == 0)
-            return translationKey;
-
-        var countKey = ToCountKey(args[0]);
-        if (string.IsNullOrWhiteSpace(countKey))
-            return translationKey;
-
-        var specificKey = translationKey[..^2] + "." + countKey;
-        return LocalizationProvider.TryTranslateForLanguage(specificKey, languageCode, out _) ? specificKey : translationKey;
-    }
-
-    private static string? ToCountKey(object? value)
-    {
-        return value switch
-        {
-            null => null,
-            sbyte number => number.ToString(System.Globalization.CultureInfo.InvariantCulture),
-            byte number => number.ToString(System.Globalization.CultureInfo.InvariantCulture),
-            short number => number.ToString(System.Globalization.CultureInfo.InvariantCulture),
-            ushort number => number.ToString(System.Globalization.CultureInfo.InvariantCulture),
-            int number => number.ToString(System.Globalization.CultureInfo.InvariantCulture),
-            uint number => number.ToString(System.Globalization.CultureInfo.InvariantCulture),
-            long number => number.ToString(System.Globalization.CultureInfo.InvariantCulture),
-            ulong number => number.ToString(System.Globalization.CultureInfo.InvariantCulture),
-            _ => value.ToString(),
-        };
+        return t("time.seconds", count: timeSpan.Seconds);
     }
 
     private static bool TrySplitLanguageKey(string key, out string languageCode, out string translationKey)
@@ -116,14 +85,28 @@ public static class TranslationFunctions
         return true;
     }
 
-    private static string Format(string value, object?[]? args)
+    private static string Format(string value, object? args, decimal? count = null)
     {
-        if (args == null)
+        if (args == null && count == null)
             return value;
 
-        for (var i = 0; i < args.Length; i++)
-            value = value.Replace("{$" + (i + 1) + "}", args[i]?.ToString() ?? string.Empty, StringComparison.Ordinal);
+        var replacements =
+            args?.GetType()
+                .GetProperties()
+                .Where(property => property.CanRead && property.GetIndexParameters().Length == 0)
+                .ToDictionary(property => property.Name, property => property.GetValue(args)?.ToString() ?? string.Empty)
+            ?? new Dictionary<string, string>();
+        if (replacements.ContainsKey("count"))
+            throw new ArgumentException("'count' is reserved. Pass it through the count argument instead.", nameof(args));
 
-        return value;
+        if (count.HasValue)
+            replacements["count"] = count.Value.ToString();
+
+        // Replace once so placeholder-like text inside an argument remains literal.
+        return System.Text.RegularExpressions.Regex.Replace(
+            value,
+            @"%\{([^{}]+)\}",
+            match => replacements.TryGetValue(match.Groups[1].Value, out var replacement) ? replacement : match.Value
+        );
     }
 }

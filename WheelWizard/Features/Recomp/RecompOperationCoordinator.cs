@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.IO.Abstractions;
-using WheelWizard.Services;
 
 namespace WheelWizard.Recomp;
 
@@ -12,11 +11,24 @@ public static class RecompOperationCoordinator
     public static bool IsBusy => Volatile.Read(ref _active) != 0;
     public static event Action? Changed;
 
-    public static IDisposable Acquire() => Acquire(PathManager.WheelWizardAppdataPath);
-
     public static IDisposable Acquire(string appData, IFileSystem? fileSystem = null) => AcquireCore(appData, fileSystem, false);
 
-    public static IDisposable AcquireForRelocation(string appData) => AcquireCore(appData, null, true);
+    /// <summary>Runs <paramref name="operation"/> under the lease, reporting a held lease as an ordinary failure.</summary>
+    public static async Task<OperationResult> RunAsync(string appData, Func<Task<OperationResult>> operation)
+    {
+        try
+        {
+            using var lease = Acquire(appData);
+            return await operation();
+        }
+        catch (IOException ex)
+        {
+            return Fail(ex.Message);
+        }
+    }
+
+    public static IDisposable AcquireForRelocation(string appData, IFileSystem? fileSystem = null) =>
+        AcquireCore(appData, fileSystem, true);
 
     private static IDisposable AcquireCore(string appData, IFileSystem? fileSystem, bool relocating)
     {

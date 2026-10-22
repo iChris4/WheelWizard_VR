@@ -1,0 +1,372 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:components="clr-namespace:WheelWizard.Views.Components"
+             mc:Ignorable="d" d:DesignWidth="444" d:DesignHeight="716"
+             x:Class="WheelWizard.Settings.Views.RecompCameraSettings">
+    <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="0,10,0,0">
+            <StackPanel x:Name="CameraSection">
+            <components:FormFieldLabel Text="Camera" Margin="0,0,0,4" />
+            <SelectableTextBlock Classes="TinyText" TextWrapping="Wrap" Margin="0,0,0,6"
+                                 Text="Changes apply on the next launch." />
+            <StackPanel Spacing="4" Margin="0,0,0,7">
+                <Border x:Name="LeanBackRow" Classes="SettingsBlockStyle SettingsRowStyle SettingsRowTop">
+                    <Grid ColumnDefinitions="*,Auto" MinHeight="40">
+                        <StackPanel Grid.Column="0"
+                                    Margin="0,0,16,0"
+                                    Spacing="3"
+                                    HorizontalAlignment="Left"
+                                    VerticalAlignment="Center">
+                            <components:FormFieldLabel Text="Lean back angle" />
+                            <SelectableTextBlock Classes="TinyText"
+                                       Text="Tilts the race view back for playing reclined. 0 applies no tilt."
+                                       TextAlignment="Left"
+                                       TextWrapping="Wrap" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                            <components:ValueSlider x:Name="LeanBackSlider" Width="130"
+                                    Minimum="-45" Maximum="45" TickCount="91"
+                                    SmallChange="1" LargeChange="5"
+                                    VerticalAlignment="Center" />
+                            <TextBlock x:Name="LeanBackValue" Classes="BodyText" Width="52" TextAlignment="Right"
+                                       VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+                <Border x:Name="DefaultCameraRow" Classes="SettingsBlockStyle SettingsRowStyle SettingsRowMiddle">
+                    <Grid ColumnDefinitions="*,Auto" MinHeight="40">
+                        <StackPanel Grid.Column="0"
+                                    Margin="0,0,16,0"
+                                    Spacing="3"
+                                    HorizontalAlignment="Left"
+                                    VerticalAlignment="Center">
+                            <components:FormFieldLabel Text="Default camera" />
+                            <SelectableTextBlock Classes="TinyText"
+                                       Text="The camera each race starts on once its intro, which always shows the game's camera, is over: ride behind the kart like the game, or sit in the driver's seat. Clicking the right thumbstick switches the race in progress; the next race starts on this one again."
+                                       TextAlignment="Left"
+                                       TextWrapping="Wrap" />
+                        </StackPanel>
+                        <components:Dropdown Grid.Column="1"
+                                  x:Name="DefaultCameraDropdown"
+                                  HorizontalAlignment="Right"
+                                  VerticalAlignment="Center" />
+                    </Grid>
+                </Border>
+                <Border x:Name="BulletBillRow" Classes="SettingsBlockStyle SettingsRowStyle SettingsRowMiddle">
+                    <Grid ColumnDefinitions="*,Auto" MinHeight="40">
+                        <StackPanel Grid.Column="0"
+                                    Margin="0,0,16,0"
+                                    Spacing="3"
+                                    HorizontalAlignment="Left"
+                                    VerticalAlignment="Center">
+                            <components:FormFieldLabel Text="Bullet Bill" />
+                            <SelectableTextBlock Classes="TinyText"
+                                       Text="While you are a Bullet Bill in first person: ride inside the bullet, or watch through the game's camera until it ends."
+                                       TextAlignment="Left"
+                                       TextWrapping="Wrap" />
+                        </StackPanel>
+                        <components:Dropdown Grid.Column="1"
+                                  x:Name="BulletBillDropdown"
+                                  HorizontalAlignment="Right"
+                                  VerticalAlignment="Center" />
+                    </Grid>
+                </Border>
+                <Border x:Name="RotationRow" Classes="SettingsBlockStyle SettingsRowStyle SettingsRowMiddle">
+                    <Grid ColumnDefinitions="*,Auto" MinHeight="40">
+                        <StackPanel Grid.Column="0"
+                                    Margin="0,0,16,0"
+                                    Spacing="3"
+                                    HorizontalAlignment="Left"
+                                    VerticalAlignment="Center">
+                            <components:FormFieldLabel Text="Follow kart rotation" />
+                            <SelectableTextBlock Classes="TinyText"
+                                       Text="In first person, follow turning only (the comfortable choice), turning and climbing, or all kart rotation including banking."
+                                       TextAlignment="Left"
+                                       TextWrapping="Wrap" />
+                        </StackPanel>
+                        <components:Dropdown Grid.Column="1"
+                                  x:Name="RotationDropdown"
+                                  HorizontalAlignment="Right"
+                                  VerticalAlignment="Center" />
+                    </Grid>
+                </Border>
+                <Border x:Name="HideRow" Classes="SettingsBlockStyle SettingsRowStyle SettingsRowMiddle">
+                    <Grid ColumnDefinitions="*,Auto" MinHeight="40">
+                        <StackPanel Grid.Column="0"
+                                    Margin="0,0,16,0"
+                                    Spacing="3"
+                                    HorizontalAlignment="Left"
+                                    VerticalAlignment="Center">
+                            <components:FormFieldLabel Text="Hide in first person" />
+                            <SelectableTextBlock Classes="TinyText"
+                                       Text="Your driver sits where your eyes are. Other racers are never hidden. In the cockpit the character body replaces this; Miis and unknown characters still use it."
+                                       TextAlignment="Left"
+                                       TextWrapping="Wrap" />
+                        </StackPanel>
+                        <components:Dropdown Grid.Column="1"
+                                  x:Name="HideDropdown"
+                                  HorizontalAlignment="Right"
+                                  VerticalAlignment="Center" />
+                    </Grid>
+                </Border>
+                <Border x:Name="SeatRow" Classes="SettingsBlockStyle SettingsRowStyle SettingsRowMiddle">
+                    <Grid ColumnDefinitions="*,Auto" MinHeight="40">
+                        <StackPanel Grid.Column="0"
+                                    Margin="0,0,16,0"
+                                    Spacing="3"
+                                    HorizontalAlignment="Left"
+                                    VerticalAlignment="Center">
+                            <components:FormFieldLabel Text="Seat" />
+                            <SelectableTextBlock Classes="TinyText"
+                                       Text="The cockpit puts you at the driver's eyes, life-size, with the steering wheel or handlebar turning within reach. Custom uses the head offsets from the in-game settings (F10 &gt; Camera)."
+                                       TextAlignment="Left"
+                                       TextWrapping="Wrap" />
+                        </StackPanel>
+                        <components:Dropdown Grid.Column="1"
+                                  x:Name="SeatDropdown"
+                                  HorizontalAlignment="Right"
+                                  VerticalAlignment="Center" />
+                    </Grid>
+                </Border>
+                <Border x:Name="BodyIkRow" Classes="SettingsBlockStyle SettingsRowStyle SettingsRowMiddle">
+                    <Grid ColumnDefinitions="*,Auto" MinHeight="40">
+                        <StackPanel Grid.Column="0"
+                                    Margin="0,0,16,0"
+                                    Spacing="3"
+                                    HorizontalAlignment="Left"
+                                    VerticalAlignment="Center">
+                            <components:FormFieldLabel Text="Character body" />
+                            <SelectableTextBlock Classes="TinyText"
+                                       Text="In the cockpit, your own character is drawn around you: its body sits in the seat, its arms follow the controllers and its head is hidden. Its hands replace the VR gloves, still holding your item. Not while you are a Bullet Bill. Miis and unknown characters keep the gloves and the driver hiding above; King Boo shows only his hands. Character body by heurazy."
+                                       TextAlignment="Left"
+                                       TextWrapping="Wrap" />
+                        </StackPanel>
+                        <components:ToggleCheckBox Grid.Column="1"
+                                  x:Name="BodyIkSwitch"
+                                  Variant="Switch"
+                                  HorizontalAlignment="Right"
+                                  VerticalAlignment="Center" />
+                    </Grid>
+                </Border>
+                <Border x:Name="BodyIkHandsOnlyRow" Classes="SettingsBlockStyle SettingsRowStyle SettingsRowMiddle">
+                    <Grid ColumnDefinitions="*,Auto" MinHeight="40">
+                        <StackPanel Grid.Column="0"
+                                    Margin="0,0,16,0"
+                                    Spacing="3"
+                                    HorizontalAlignment="Left"
+                                    VerticalAlignment="Center">
+                            <components:FormFieldLabel Text="Character hands only" />
+                            <SelectableTextBlock Classes="TinyText"
+                                       Text="Hides the character's body and arms and keeps only its own hands, following the controllers."
+                                       TextAlignment="Left"
+                                       TextWrapping="Wrap" />
+                        </StackPanel>
+                        <components:ToggleCheckBox Grid.Column="1"
+                                  x:Name="BodyIkHandsOnlySwitch"
+                                  Variant="Switch"
+                                  HorizontalAlignment="Right"
+                                  VerticalAlignment="Center" />
+                    </Grid>
+                </Border>
+                <Border x:Name="LeftHandRollRow" Classes="SettingsBlockStyle SettingsRowStyle SettingsRowMiddle">
+                    <Grid ColumnDefinitions="*,Auto" MinHeight="40">
+                        <StackPanel Grid.Column="0"
+                                    Margin="0,0,16,0"
+                                    Spacing="3"
+                                    HorizontalAlignment="Left"
+                                    VerticalAlignment="Center">
+                            <components:FormFieldLabel Text="Character hand rotation (left)" />
+                            <SelectableTextBlock Classes="TinyText"
+                                       Text="Turns the character's hand about your forearm until it sits as you hold the controller. Higher turns it counter-clockwise as you look along your arm. Default 90°."
+                                       TextAlignment="Left"
+                                       TextWrapping="Wrap" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                            <components:ValueSlider x:Name="LeftHandRollSlider" Width="130"
+                                    Minimum="-180" Maximum="180" TickCount="73"
+                                    SmallChange="5" LargeChange="15"
+                                    VerticalAlignment="Center" />
+                            <TextBlock x:Name="LeftHandRollValue" Classes="BodyText" Width="52" TextAlignment="Right"
+                                       VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+                <Border x:Name="RightHandRollRow" Classes="SettingsBlockStyle SettingsRowStyle SettingsRowMiddle">
+                    <Grid ColumnDefinitions="*,Auto" MinHeight="40">
+                        <StackPanel Grid.Column="0"
+                                    Margin="0,0,16,0"
+                                    Spacing="3"
+                                    HorizontalAlignment="Left"
+                                    VerticalAlignment="Center">
+                            <components:FormFieldLabel Text="Character hand rotation (right)" />
+                            <SelectableTextBlock Classes="TinyText"
+                                       Text="Turns the character's hand about your forearm until it sits as you hold the controller. Higher turns it counter-clockwise as you look along your arm. Default -90°."
+                                       TextAlignment="Left"
+                                       TextWrapping="Wrap" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                            <components:ValueSlider x:Name="RightHandRollSlider" Width="130"
+                                    Minimum="-180" Maximum="180" TickCount="73"
+                                    SmallChange="5" LargeChange="15"
+                                    VerticalAlignment="Center" />
+                            <TextBlock x:Name="RightHandRollValue" Classes="BodyText" Width="52" TextAlignment="Right"
+                                       VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+                <Border x:Name="PlaceholderWheelRow" Classes="SettingsBlockStyle SettingsRowStyle SettingsRowMiddle">
+                    <Grid ColumnDefinitions="*,Auto" MinHeight="40">
+                        <StackPanel Grid.Column="0"
+                                    Margin="0,0,16,0"
+                                    Spacing="3"
+                                    HorizontalAlignment="Left"
+                                    VerticalAlignment="Center">
+                            <components:FormFieldLabel Text="Placeholder wheel or handlebar" />
+                            <SelectableTextBlock Classes="TinyText"
+                                       Text="In the cockpit, draws a separate VR steering wheel (karts) or handlebar (bikes) whenever the vehicle's own is not the one turning, as in the race's opening pan. Off, you only see the vehicle's own."
+                                       TextAlignment="Left"
+                                       TextWrapping="Wrap" />
+                        </StackPanel>
+                        <components:ToggleCheckBox Grid.Column="1"
+                                  x:Name="PlaceholderWheelSwitch"
+                                  Variant="Switch"
+                                  HorizontalAlignment="Right"
+                                  VerticalAlignment="Center" />
+                    </Grid>
+                </Border>
+                <Border x:Name="HandSteeringRow" Classes="SettingsBlockStyle SettingsRowStyle SettingsRowMiddle">
+                    <Grid ColumnDefinitions="*,Auto" MinHeight="40">
+                        <StackPanel Grid.Column="0"
+                                    Margin="0,0,16,0"
+                                    Spacing="3"
+                                    HorizontalAlignment="Left"
+                                    VerticalAlignment="Center">
+                            <components:FormFieldLabel Text="Hand steering" />
+                            <SelectableTextBlock Classes="TinyText"
+                                       Text="In the cockpit, squeeze a grip near the steering wheel or handlebar to grab it, and turn it to steer. Releasing both grips gives steering back to the stick. Hand steering by heurazy."
+                                       TextAlignment="Left"
+                                       TextWrapping="Wrap" />
+                        </StackPanel>
+                        <components:ToggleCheckBox Grid.Column="1"
+                                  x:Name="HandSteeringSwitch"
+                                  Variant="Switch"
+                                  HorizontalAlignment="Right"
+                                  VerticalAlignment="Center" />
+                    </Grid>
+                </Border>
+                <Border x:Name="WheelKartRow" Classes="SettingsBlockStyle SettingsRowStyle SettingsRowMiddle">
+                    <Grid ColumnDefinitions="*,Auto" MinHeight="40">
+                        <StackPanel Grid.Column="0"
+                                    Margin="0,0,16,0"
+                                    Spacing="3"
+                                    HorizontalAlignment="Left"
+                                    VerticalAlignment="Center">
+                            <components:FormFieldLabel Text="Hand steering sensitivity (kart)" />
+                            <SelectableTextBlock Classes="TinyText"
+                                       Text="How far you turn the kart's wheel with your hands for full steering (default 90°). Lower is more sensitive: less turning. The stick steers as before; at full stick the wheel shows this angle. Needs Hand steering."
+                                       TextAlignment="Left"
+                                       TextWrapping="Wrap" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                            <components:ValueSlider x:Name="WheelKartSlider" Width="130"
+                                    Minimum="20" Maximum="180" TickCount="33"
+                                    SmallChange="5" LargeChange="15"
+                                    VerticalAlignment="Center" />
+                            <TextBlock x:Name="WheelKartValue" Classes="BodyText" Width="52" TextAlignment="Right"
+                                       VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+                <Border x:Name="WheelBikeRow" Classes="SettingsBlockStyle SettingsRowStyle SettingsRowMiddle">
+                    <Grid ColumnDefinitions="*,Auto" MinHeight="40">
+                        <StackPanel Grid.Column="0"
+                                    Margin="0,0,16,0"
+                                    Spacing="3"
+                                    HorizontalAlignment="Left"
+                                    VerticalAlignment="Center">
+                            <components:FormFieldLabel Text="Hand steering sensitivity (bike)" />
+                            <SelectableTextBlock Classes="TinyText"
+                                       Text="How far you turn the bike's handlebar with your hands for full steering (default 45°). Lower is more sensitive: less turning. The stick steers as before; at full stick the handlebar shows this angle. Needs Hand steering."
+                                       TextAlignment="Left"
+                                       TextWrapping="Wrap" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                            <components:ValueSlider x:Name="WheelBikeSlider" Width="130"
+                                    Minimum="20" Maximum="180" TickCount="33"
+                                    SmallChange="5" LargeChange="15"
+                                    VerticalAlignment="Center" />
+                            <TextBlock x:Name="WheelBikeValue" Classes="BodyText" Width="52" TextAlignment="Right"
+                                       VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+                <Border x:Name="ItemHandRow" Classes="SettingsBlockStyle SettingsRowStyle SettingsRowMiddle">
+                    <Grid ColumnDefinitions="*,Auto" MinHeight="40">
+                        <StackPanel Grid.Column="0"
+                                    Margin="0,0,16,0"
+                                    Spacing="3"
+                                    HorizontalAlignment="Left"
+                                    VerticalAlignment="Center">
+                            <components:FormFieldLabel Text="Item in cockpit hand" />
+                            <SelectableTextBlock Classes="TinyText"
+                                       Text="Show Player 1's settled inventory item above the selected palm. A triple shows what is left of it as copies. Using or losing the item hides it."
+                                       TextAlignment="Left"
+                                       TextWrapping="Wrap" />
+                        </StackPanel>
+                        <components:Dropdown Grid.Column="1"
+                                  x:Name="ItemHandDropdown"
+                                  HorizontalAlignment="Right"
+                                  VerticalAlignment="Center" />
+                    </Grid>
+                </Border>
+                <Border x:Name="ItemThrowRow" Classes="SettingsBlockStyle SettingsRowStyle SettingsRowMiddle">
+                    <Grid ColumnDefinitions="*,Auto" MinHeight="40">
+                        <StackPanel Grid.Column="0"
+                                    Margin="0,0,16,0"
+                                    Spacing="3"
+                                    HorizontalAlignment="Left"
+                                    VerticalAlignment="Center">
+                            <components:FormFieldLabel Text="Throw the item by swinging" />
+                            <SelectableTextBlock Classes="TinyText"
+                                       Text="With that hand off the wheel, swing it quickly forward to throw the item ahead of the kart, or back to throw it behind, as the stick and item button would. Swinging while you hold the item button throws the item you are trailing."
+                                       TextAlignment="Left"
+                                       TextWrapping="Wrap" />
+                        </StackPanel>
+                        <components:ToggleCheckBox Grid.Column="1"
+                                  x:Name="ItemThrowSwitch"
+                                  Variant="Switch"
+                                  HorizontalAlignment="Right"
+                                  VerticalAlignment="Center" />
+                    </Grid>
+                </Border>
+                <Border x:Name="ItemSizeRow" Classes="SettingsBlockStyle SettingsRowStyle SettingsRowBottom">
+                    <Grid ColumnDefinitions="*,Auto" MinHeight="40">
+                        <StackPanel Grid.Column="0"
+                                    Margin="0,0,16,0"
+                                    Spacing="3"
+                                    HorizontalAlignment="Left"
+                                    VerticalAlignment="Center">
+                            <components:FormFieldLabel Text="Held item size" />
+                            <SelectableTextBlock Classes="TinyText"
+                                       Text="How big the item in your hand is, across its largest side. Default 0.28 m."
+                                       TextAlignment="Left"
+                                       TextWrapping="Wrap" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                            <components:ValueSlider x:Name="ItemSizeSlider" Width="130"
+                                    Minimum="0.05" Maximum="0.6" TickCount="56"
+                                    SmallChange="0.01" LargeChange="0.05"
+                                    VerticalAlignment="Center" />
+                            <TextBlock x:Name="ItemSizeValue" Classes="BodyText" Width="52" TextAlignment="Right"
+                                       VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </StackPanel>
+            </StackPanel>
+            <Border Classes="SettingsBottomSpacer" />
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

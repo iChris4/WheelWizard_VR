@@ -1,64 +1,97 @@
-using WheelWizard.Settings;
+using System.Diagnostics;
 
 namespace WheelWizard.Settings.Types;
 
-public abstract class Setting
+// The non-generic surface is only for change notifications and heterogeneous registries.
+public abstract class Setting(string name)
 {
-    protected Setting(Type type, string name, object defaultValue)
+    public string Name { get; } = name;
+    public event Action<Setting>? Changed;
+    public Exception? SaveError { get; protected set; }
+    public abstract bool IsValid();
+    public abstract void Reset(bool skipSave = false);
+
+    protected void SignalChange()
     {
-        Name = name;
-        DefaultValue = defaultValue;
-        Value = defaultValue;
-        ValueType = type;
+        if (Changed is not { } handlers)
+            return;
+        foreach (Action<Setting> handler in handlers.GetInvocationList())
+        {
+            try
+            {
+                handler(this);
+            }
+            catch (Exception exception)
+            {
+                Trace.TraceError($"A subscriber threw while handling a change to setting '{Name}': {exception}");
+            }
+        }
     }
+}
 
-    public string Name { get; protected set; }
-    public object DefaultValue { get; protected set; }
-    protected object Value { get; set; }
-    protected Func<object, bool>? ValidationFunc { get; set; }
-    protected bool SaveEvenIfNotValid { get; set; }
-    public Type ValueType { get; protected set; }
+public abstract class Setting<T>(string name, T defaultValue) : Setting(name)
+{
+    public T DefaultValue { get; } = defaultValue;
+    public T Value { get; protected set; } = defaultValue;
+    protected bool SaveEvenIfNotValid { get; private set; }
+    private Func<T, bool>? _validation;
 
-    public bool Set(object newValue, bool skipSave = false)
+    public T Get() => Value;
+
+    public bool Set(T newValue, bool skipSave = false)
     {
-        if (newValue.GetType() != ValueType)
+        ArgumentNullException.ThrowIfNull(newValue);
+        SaveError = null;
+        if (EqualityComparer<T>.Default.Equals(Value, newValue))
+            return true;
+        if (!SaveEvenIfNotValid && _validation?.Invoke(newValue) == false)
             return false;
 
-        if (Value?.Equals(newValue) == true)
-            return true;
-
-        var succeeded = SetInternal(newValue, skipSave);
-        if (succeeded)
-            SignalChange();
-
-        return succeeded;
+        var previous = Value;
+        Value = newValue;
+        try
+        {
+            ApplyValue(skipSave);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            RestoreValueAfterSaveFailure(previous);
+            SaveError = exception;
+            return false;
+        }
+        SignalChange();
+        return true;
     }
 
-    protected abstract bool SetInternal(object newValue, bool skipSave = false);
+    protected abstract void ApplyValue(bool skipSave);
 
-    public abstract object Get();
+    protected virtual void RestoreValueAfterSaveFailure(T previousValue) => Value = previousValue;
 
-    public void Reset()
+    public override bool IsValid() => _validation?.Invoke(Value) ?? true;
+
+    public override void Reset(bool skipSave = false)
     {
-        var s = SaveEvenIfNotValid;
+        var previous = SaveEvenIfNotValid;
         SaveEvenIfNotValid = true;
-        Set(DefaultValue);
-        SaveEvenIfNotValid = s;
+        try
+        {
+            Set(DefaultValue, skipSave);
+        }
+        finally
+        {
+            SaveEvenIfNotValid = previous;
+        }
     }
 
-    public abstract bool IsValid();
-
-    public Setting SetValidation(Func<object?, bool> validationFunc)
+    public Setting<T> SetValidation(Func<T, bool> validation)
     {
-        ValidationFunc = validationFunc;
+        _validation = validation;
         return this;
     }
 
-    public Setting SetForceSave(bool saveEvenIfNotValid)
+    public Setting<T> SetForceSave(bool enabled)
     {
-        SaveEvenIfNotValid = saveEvenIfNotValid;
+        SaveEvenIfNotValid = enabled;
         return this;
     }
-
-    protected void SignalChange() => SettingsSignalRuntime.Publish(this);
 }

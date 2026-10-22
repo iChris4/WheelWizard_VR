@@ -1,4 +1,4 @@
-using WheelWizard.Services;
+using WheelWizard.ApplicationData;
 
 namespace WheelWizard.Recomp;
 
@@ -26,7 +26,14 @@ public sealed record RecompBackend(
 )
 {
     public const string VrProductId = "wiicompiled-openxr-vr";
-    public static readonly RecompBackend Normal = new(RecompBackendKind.Normal, "Recomp", "WiiCompiled", "patchzyy", "Wiicompiled", null);
+    public static readonly RecompBackend Normal = new(
+        RecompBackendKind.Normal,
+        "Recomp",
+        "WiiCompiled",
+        RecompReleaseResolver.RepositoryOwner,
+        RecompReleaseResolver.RepositoryName,
+        null
+    );
     public static readonly RecompBackend OpenXR = new(
         RecompBackendKind.OpenXR,
         "RecompVR",
@@ -48,16 +55,17 @@ public sealed record RecompBackend(
 }
 
 /// <summary>Independent of SettingsManager to avoid a configuration/DI dependency cycle.</summary>
-public sealed class RecompBackendSelection
+public sealed class RecompBackendSelection(IApplicationDataLocation applicationData, IRecompPaths paths)
 {
     public RecompBackendKind Kind { get; private set; }
     public RecompBackend Backend => RecompBackend.For(Kind);
-    public string ConfigPath => Backend.Config(PathManager.WheelWizardAppdataPath);
+
+    // The normal Config.toml lives wherever IRecompPaths puts it on this platform; VR is Windows-only.
+    public string ConfigPath => Kind == RecompBackendKind.OpenXR ? Backend.Config(applicationData.DirectoryPath) : paths.ConfigFilePath;
 
     public void Restore(bool normal, bool vr) =>
         Kind =
-            !OperatingSystem.IsWindows() ? RecompBackendKind.Dolphin
-            : vr ? RecompBackendKind.OpenXR
-            : normal ? RecompBackendKind.Normal
+            vr && OperatingSystem.IsWindows() ? RecompBackendKind.OpenXR
+            : normal && RecompPlatform.IsSupported ? RecompBackendKind.Normal
             : RecompBackendKind.Dolphin;
 }

@@ -1,150 +1,97 @@
 using System.IO.Abstractions;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
-using WheelWizard.Services;
 using WheelWizard.Settings.Types;
 
 namespace WheelWizard.Settings;
 
 public class WhWzSettingManager(ILogger<WhWzSettingManager> logger, IFileSystem fileSystem) : IWhWzSettingManager
 {
-    // LOCKS:
-    // We are working with locks. This is to ensure that we always have accurate information in our settings / application.
-    // We do not create multiple threads. However, some of our features run through Tasks. Those are executed asynchronously, therefore still require locks.
-
-    // Sync Root:  Responsible for synchronizing access to the _settings list and the _loaded flag.
-    // It ensures that multiple threads don't modify the settings list or the loaded state at the same time
-    // File IO Sync:  Responsible for reading and writing the INI files. It ensures that multiple threads don't read/write at the same time
-    private readonly object _syncRoot = new();
-    private readonly object _fileIoSync = new();
+    private readonly object _sync = new();
     private bool _loaded;
-    private readonly Dictionary<string, WhWzSetting> _settings = new();
+    private Exception? _loadError;
+    private readonly Dictionary<string, IWhWzSetting> _settings = new();
+    private readonly Dictionary<string, JsonElement> _unknownSettings = new();
 
-    public void RegisterSetting(WhWzSetting setting)
+    public void RegisterSetting(IWhWzSetting setting)
     {
-        lock (_syncRoot)
-        {
-            if (_loaded)
-                return;
-
-            _settings[setting.Name] = setting;
-        }
-    }
-
-    public void SaveSettings(WhWzSetting invokingSetting)
-    {
-        Dictionary<string, WhWzSetting> settingsSnapshot;
-        lock (_syncRoot)
+        lock (_sync)
         {
             if (!_loaded)
-                return;
-
-            settingsSnapshot = new(_settings);
+                _settings[setting.Name] = setting;
         }
+    }
 
-        var settingsToSave = new Dictionary<string, object?>();
-
-        foreach (var (name, setting) in settingsSnapshot)
+    public void SaveSettings(string configPath, IWhWzSetting invokingSetting)
+    {
+        lock (_sync)
         {
-            settingsToSave[name] = setting.Get();
-        }
+            if (!_loaded)
+                throw new IOException("Application settings have not been loaded.");
+            if (_loadError != null)
+                throw new IOException("The settings file could not be loaded; the original file has been preserved.", _loadError);
 
-        var jsonString = JsonSerializer.Serialize(settingsToSave, new JsonSerializerOptions { WriteIndented = true });
-        lock (_fileIoSync)
-        {
-            var configPath = PathManager.WheelWizardConfigFilePath;
+            var values = _unknownSettings.ToDictionary(pair => pair.Key, pair => (object?)pair.Value);
+            foreach (var (name, setting) in _settings)
+                values[name] = setting.GetValue();
+
             try
             {
-                var directoryPath = fileSystem.Path.GetDirectoryName(configPath);
-                if (!string.IsNullOrWhiteSpace(directoryPath) && !fileSystem.Directory.Exists(directoryPath))
-                    fileSystem.Directory.CreateDirectory(directoryPath);
-
-                WheelWizard.Recomp.RecompConfig.WriteAtomic(fileSystem, configPath, jsonString);
+                SettingsFile.Write(
+                    fileSystem,
+                    configPath,
+                    JsonSerializer.Serialize(values, new JsonSerializerOptions { WriteIndented = true })
+                );
             }
-            catch (Exception ex)
+            catch (Exception exception)
             {
-                logger.LogError(ex, "Failed to save settings file: {Path}", configPath);
+                logger.LogError(exception, "Failed to save settings file: {Path}", configPath);
+                throw;
             }
         }
     }
 
-    public void LoadSettings()
+    public void LoadSettings(string configPath)
     {
-        Dictionary<string, WhWzSetting> settingsSnapshot;
-        lock (_syncRoot)
+        lock (_sync)
         {
             if (_loaded)
                 return;
-
-            _loaded = true;
-            settingsSnapshot = new(_settings);
-        }
-
-        // Even if it now returns early, loading has been considered complete.
-        string? jsonString;
-        lock (_fileIoSync)
-        {
-            var configPath = PathManager.WheelWizardConfigFilePath;
             try
             {
                 if (!fileSystem.File.Exists(configPath))
+                    return;
+                var values = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(fileSystem.File.ReadAllText(configPath));
+                if (values == null)
+                    throw new JsonException("Expected a settings object.");
+                foreach (var (name, value) in values)
                 {
-                    var legacy = PathManager.LegacyWheelWizardConfigFilePath;
-                    fileSystem.Directory.CreateDirectory(PathManager.WheelWizardAppdataPath);
+                    if (!_settings.TryGetValue(name, out var setting))
+                    {
+                        _unknownSettings[name] = value;
+                        continue;
+                    }
                     try
                     {
-                        if (fileSystem.File.Exists(legacy))
-                            fileSystem.File.Copy(legacy, configPath, overwrite: false);
-                        else
-                        {
-                            using var created = fileSystem.FileStream.New(configPath, FileMode.CreateNew, FileAccess.Write, FileShare.Read);
-                            created.Write("{}"u8);
-                        }
+                        if (!setting.SetFromJson(value, skipSave: true))
+                            setting.Reset(skipSave: true);
                     }
-                    catch (IOException) when (fileSystem.File.Exists(configPath))
+                    catch (Exception exception)
                     {
-                        // Another launcher completed the one-time import first; read its result.
+                        logger.LogWarning(exception, "Invalid value for setting {SettingName}; resetting to default.", name);
+                        setting.Reset(skipSave: true);
                     }
                 }
-                jsonString = fileSystem.File.ReadAllText(configPath);
             }
-            catch (Exception ex)
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException)
             {
-                logger.LogError(ex, "Failed to read settings file: {Path}", configPath);
-                jsonString = null;
+                _loadError = exception;
+                logger.LogError(exception, "Failed to load settings file: {Path}", configPath);
             }
-        }
-
-        if (jsonString == null)
-            return;
-
-        try
-        {
-            var loadedSettings = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(jsonString);
-            if (loadedSettings == null)
-                return;
-
-            foreach (var kvp in loadedSettings)
+            finally
             {
-                if (!settingsSnapshot.TryGetValue(kvp.Key, out var setting))
-                    continue;
-
-                try
-                {
-                    var success = setting.SetFromJson(kvp.Value, skipSave: true);
-                    if (!success)
-                        setting.Set(setting.DefaultValue, skipSave: true);
-                }
-                catch (Exception ex)
-                {
-                    logger.LogWarning(ex, "Invalid value for setting {SettingName}; resetting to default.", setting.Name);
-                    setting.Set(setting.DefaultValue, skipSave: true);
-                }
+                _loaded = true;
             }
-        }
-        catch (JsonException e)
-        {
-            logger.LogError(e, "Failed to deserialize the JSON config");
         }
     }
 }

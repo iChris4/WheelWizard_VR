@@ -1,0 +1,16 @@
+en:
+  items:
+    one: "One item for %{name}"
+    other: "%{count} items for %{name}"
+  fallback:
+    one: "English one"
+    other: "English other"
+  plain: "Value %{amount}"
+ru:
+  items:
+    one: "ru one"
+    few: "ru few"
+    many: "ru many"
+    other: "ru other"
+  fallback:
+    one: "ru one"

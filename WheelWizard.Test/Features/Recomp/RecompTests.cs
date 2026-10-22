@@ -26,8 +26,18 @@ public class RecompTests
         );
 
         Assert.Equal(
-            "--silent --game \"D:\\Games\\Mario Kart Wii.rvz\" --install-dir \"D:\\WheelWizard\\Recomp\\Install\" --portable "
-                + "--progress-json --retro-dir \"D:\\WheelWizard\\RetroRewind6\" --download-retro-wfc-payload",
+            [
+                "--silent",
+                "--game",
+                @"D:\Games\Mario Kart Wii.rvz",
+                "--install-dir",
+                @"D:\WheelWizard\Recomp\Install",
+                "--portable",
+                "--progress-json",
+                "--retro-dir",
+                @"D:\WheelWizard\RetroRewind6",
+                "--download-retro-wfc-payload",
+            ],
             arguments
         );
     }
@@ -45,7 +55,7 @@ public class RecompTests
             }
         );
 
-        Assert.EndsWith("--retro-dir \"D:\\WheelWizard\\RetroRewind6\" --skip-retro-wfc-payload", arguments);
+        Assert.Equal(["--retro-dir", @"D:\WheelWizard\RetroRewind6", "--skip-retro-wfc-payload"], arguments.TakeLast(3));
         Assert.DoesNotContain("--download-retro-wfc-payload", arguments);
     }
 
@@ -53,11 +63,27 @@ public class RecompTests
     public void RepairProducts_PassesExactlyOnePayloadOption()
     {
         Assert.Equal(
-            "--repair-products --install-dir \"D:\\Recomp\" --retro-dir \"D:\\RetroRewind6\" --download-retro-wfc-payload --progress-json",
+            [
+                "--repair-products",
+                "--install-dir",
+                @"D:\Recomp",
+                "--retro-dir",
+                @"D:\RetroRewind6",
+                "--download-retro-wfc-payload",
+                "--progress-json",
+            ],
             RecompSetupCommandBuilder.BuildRepairProductsArguments(@"D:\Recomp", @"D:\RetroRewind6")
         );
         Assert.Equal(
-            "--repair-products --install-dir \"D:\\Recomp\" --retro-dir \"D:\\RetroRewind6\" --skip-retro-wfc-payload --progress-json",
+            [
+                "--repair-products",
+                "--install-dir",
+                @"D:\Recomp",
+                "--retro-dir",
+                @"D:\RetroRewind6",
+                "--skip-retro-wfc-payload",
+                "--progress-json",
+            ],
             RecompSetupCommandBuilder.BuildRepairProductsArguments(@"D:\Recomp", @"D:\RetroRewind6", RecompRetroWfcPayloadMode.Skip)
         );
     }
@@ -90,9 +116,20 @@ public class RecompTests
     public void QuestBuild_PassesGameFilesOnlyWhenAskedTo()
     {
         Assert.Equal(
-            "--build-quest --install-dir \"D:\\RecompVR\\Install\" --quest-apk \"D:\\Quest App.apk\" --output \"D:\\Out\\MarioKartWii.wcgame\" "
-                + "--quest-product base --include-game-files --progress-json",
-            RecompSetupCommandBuilder.BuildQuestArguments(@"D:\RecompVR\Install\", @"D:\Quest App.apk", @"D:\Out\MarioKartWii.wcgame", true)
+            [
+                "--build-quest",
+                "--install-dir",
+                @"D:\RecompVR\Install",
+                "--quest-apk",
+                @"D:\Quest App.apk",
+                "--output",
+                @"D:\Out\MarioKartWii.wcgame",
+                "--quest-product",
+                "base",
+                "--include-game-files",
+                "--progress-json",
+            ],
+            RecompSetupCommandBuilder.BuildQuestArguments(@"D:\RecompVR\Install", @"D:\Quest App.apk", @"D:\Out\MarioKartWii.wcgame", true)
         );
         Assert.DoesNotContain(
             "--include-game-files",
@@ -111,8 +148,9 @@ public class RecompTests
             RecompGame.RetroRewind,
             @"D:\Content\RetroRewind6"
         );
-        Assert.Contains("--quest-product retro_rewind", retro);
-        Assert.Contains("--retro-dir \"D:\\Content\\RetroRewind6\" --include-mod-content", retro);
+        var command = string.Join(' ', retro);
+        Assert.Contains("--quest-product retro_rewind", command);
+        Assert.Contains(@"--retro-dir D:\Content\RetroRewind6 --include-mod-content", command);
 
         // The unmodded game has no pack to carry.
         Assert.Throws<ArgumentException>(

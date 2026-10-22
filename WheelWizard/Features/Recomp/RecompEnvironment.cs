@@ -1,5 +1,7 @@
 using System.IO.Abstractions;
-using WheelWizard.Services;
+using WheelWizard.ApplicationData;
+using WheelWizard.CustomDistributions;
+using WheelWizard.Settings;
 
 namespace WheelWizard.Recomp;
 
@@ -18,6 +20,12 @@ public interface IRecompEnvironment
     string InstallFolderPath { get; }
 
     /// <summary>
+    /// Indicates whether Wheel Wizard is missing an extension to be able to run
+    /// the game with the configured settings.
+    /// </summary>
+    ExtensionConfigurationInfo GetExtensionConfigurationInfo { get; }
+
+    /// <summary>
     /// Whether <see cref="InstallFolderPath"/> is the portable location, which is what decides whether
     /// a fresh install is asked to lay itself out portably.
     /// </summary>
@@ -32,8 +40,15 @@ public interface IRecompEnvironment
     /// <summary>The <c>portable.txt</c> marker that makes the recomp folder a portable root.</summary>
     string PortableMarkerFilePath { get; }
 
-    /// <summary>The <c>install-state.json</c> the recomp writes to mark itself installed.</summary>
+    /// <summary>The <c>install-state.json</c> Wheel Wizard reads to know which setup release is installed.</summary>
     string InstallStateFilePath { get; }
+
+    /// <summary>
+    /// The backend's own <c>install-state.json</c>. On Windows the setup writes the same file Wheel Wizard
+    /// reads, so this equals <see cref="InstallStateFilePath"/>. On Linux the AppImage keeps its own record,
+    /// in its own schema, in its own directory, and Wheel Wizard writes <see cref="InstallStateFilePath"/> itself.
+    /// </summary>
+    string BackendStateFilePath { get; }
 
     /// <summary>The launcher copy of the setup executable inside the install directory.</summary>
     string InstalledSetupFilePath { get; }
@@ -49,30 +64,46 @@ public interface IRecompEnvironment
 }
 
 /// <inheritdoc />
-public sealed class RecompEnvironment(IFileSystem fileSystem, RecompBackendSelection selection) : IRecompEnvironment
+/// <remarks>
+/// The Windows layout of the selected backend. It is resolved per operation, so the backend, the game
+/// and the Retro Rewind folder are captured when it is created: an operation keeps the ones it started
+/// with. Both backends share the normal installation's NAND copy.
+/// </remarks>
+public sealed class RecompEnvironment(
+    IFileSystem fileSystem,
+    IRecompPaths paths,
+    IApplicationDataLocation applicationData,
+    RecompBackendSelection selection,
+    ISettingsManager settings,
+    ICustomDistributionPaths distributionPaths
+) : IRecompEnvironment
 {
     public RecompBackend Backend { get; } = selection.Backend;
-    private string Root { get; } = selection.Backend.Root(PathManager.WheelWizardAppdataPath);
-    private readonly string _retroRoot = PathManager.RetroRewind6FolderPath;
-    public string GameFilePath { get; } = PathManager.GameFilePath;
+    private string Root { get; } = selection.Backend.Root(applicationData.DirectoryPath);
+    private readonly string _retroRoot = distributionPaths.RetroRewindFolderPath;
+    public string GameFilePath { get; } = settings.Get<string>(settings.GAME_LOCATION);
 
-    public string InstallFolderPath => Path.Combine(Root, "Install");
+    public string InstallFolderPath => fileSystem.Path.Combine(Root, "Install");
 
-    public bool IsPortableInstall => PathManager.IsRecompInstallPortable;
+    public ExtensionConfigurationInfo GetExtensionConfigurationInfo => ExtensionConfigurationInfo.ExtensionFoundOrNotNeeded;
 
-    public string CacheFolderPath => Path.Combine(Root, "Cache");
+    public bool IsPortableInstall => paths.IsPortableInstall;
 
-    public string UserDataFolderPath => Path.Combine(Root, "UserData");
+    public string CacheFolderPath => fileSystem.Path.Combine(Root, "Cache");
 
-    public string PortableMarkerFilePath => Path.Combine(Root, "portable.txt");
+    public string UserDataFolderPath => fileSystem.Path.Combine(Root, "UserData");
 
-    public string InstallStateFilePath => Path.Combine(InstallFolderPath, "install-state.json");
+    public string PortableMarkerFilePath => fileSystem.Path.Combine(Root, "portable.txt");
 
-    public string InstalledSetupFilePath => Path.Combine(InstallFolderPath, "WiiCompiled-Setup.exe");
+    public string InstallStateFilePath => fileSystem.Path.Combine(InstallFolderPath, RecompPaths.InstallStateFileName);
+
+    public string BackendStateFilePath => InstallStateFilePath;
+
+    public string InstalledSetupFilePath => fileSystem.Path.Combine(InstallFolderPath, RecompSetupCommandBuilder.SetupFileName);
 
     public string? RetroRewindFolderPath => ExistingFolderOrNull(_retroRoot);
 
-    public string NandCopyFolderPath => PathManager.RecompNandCopyFolderPath;
+    public string NandCopyFolderPath => paths.NandCopyFolderPath;
 
     private string? ExistingFolderOrNull(string path)
     {
@@ -81,4 +112,43 @@ public sealed class RecompEnvironment(IFileSystem fileSystem, RecompBackendSelec
 
         return fileSystem.Directory.Exists(path) ? path : null;
     }
+}
+
+/// <summary>
+/// The Linux layout. The AppImage owns <see cref="IRecompPaths.LinuxBackendFolderPath"/> (products,
+/// state, Config.toml, workspace); Wheel Wizard's own <c>Recomp</c> folder only holds the download cache,
+/// the installed copy of the AppImage and the state file Wheel Wizard writes about it.
+/// </summary>
+public sealed class RecompLinuxEnvironment(
+    IFileSystem fileSystem,
+    IRecompPaths paths,
+    ISettingsManager settings,
+    ICustomDistributionPaths distributionPaths
+) : IRecompEnvironment
+{
+    public string GameFilePath => settings.Get<string>(settings.GAME_LOCATION);
+
+    public string InstallFolderPath => paths.LinuxBackendFolderPath;
+
+    public ExtensionConfigurationInfo GetExtensionConfigurationInfo => settings.CheckExtensionConfiguration();
+
+    public bool IsPortableInstall => false;
+
+    public string CacheFolderPath => paths.CacheFolderPath;
+
+    // Config.toml, logs and the private NAND all live in the backend folder on Linux.
+    public string UserDataFolderPath => paths.LinuxBackendFolderPath;
+
+    public string PortableMarkerFilePath => paths.PortableMarkerFilePath;
+
+    public string InstallStateFilePath => paths.InstallStateFilePath;
+
+    public string BackendStateFilePath => paths.LinuxBackendStateFilePath;
+
+    public string InstalledSetupFilePath => paths.SetupFilePath;
+
+    public string? RetroRewindFolderPath =>
+        fileSystem.Directory.Exists(distributionPaths.RetroRewindFolderPath) ? distributionPaths.RetroRewindFolderPath : null;
+
+    public string NandCopyFolderPath => paths.NandCopyFolderPath;
 }

@@ -1,5 +1,6 @@
 using System.IO.Abstractions;
-using WheelWizard.Services;
+using WheelWizard.ApplicationData;
+using WheelWizard.Dolphin.Discovery;
 using WheelWizard.Settings;
 
 namespace WheelWizard.Recomp;
@@ -28,8 +29,15 @@ public interface IRecompDolphinDataService
     OperationResult ApplyNandToRecompConfig();
 }
 
-public sealed class RecompDolphinDataService(ISettingsManager settings, IRecompSettingManager recompSettings, IFileSystem fileSystem)
-    : IRecompDolphinDataService
+public sealed class RecompDolphinDataService(
+    ISettingsManager settings,
+    IRecompSettingManager recompSettings,
+    IFileSystem fileSystem,
+    IDolphinDiscoveryService dolphinDiscovery,
+    IRecompPaths paths,
+    IApplicationDataLocation applicationData,
+    RecompBackendSelection backendSelection
+) : IRecompDolphinDataService
 {
     private bool _nandChoiceChanged;
     public bool IsSharingEnabled => settings.Get<bool>(settings.RECOMP_USE_DOLPHIN_DATA);
@@ -44,7 +52,7 @@ public sealed class RecompDolphinDataService(ISettingsManager settings, IRecompS
         {
             if (!_nandChoiceChanged)
             {
-                var normalConfig = PathManager.RecompConfigFilePath;
+                var normalConfig = paths.ConfigFilePath;
                 var configured = RecompConfig.ReadString(fileSystem, normalConfig, "paths", "nand_root");
                 if (!string.IsNullOrWhiteSpace(configured))
                     return fileSystem.Path.GetFullPath(configured, fileSystem.Path.GetDirectoryName(normalConfig)!);
@@ -57,7 +65,7 @@ public sealed class RecompDolphinDataService(ISettingsManager settings, IRecompS
             // A missing copy never falls back to the Dolphin NAND: the user chose the copy exactly
             // so that Dolphin's own data is left alone, and a private NAND is the safe default.
             if (CopyEnabled)
-                return ValidateNandFolder(PathManager.RecompNandCopyFolderPath);
+                return ValidateNandFolder(paths.NandCopyFolderPath);
 
             return null;
         }
@@ -79,7 +87,13 @@ public sealed class RecompDolphinDataService(ISettingsManager settings, IRecompS
         }
     }
 
-    public string? FindCandidateUserFolder() => ValidateUserFolder(PathManager.TryFindUserFolderPath());
+    public string? FindCandidateUserFolder() =>
+        ValidateUserFolder(
+            dolphinDiscovery.FindUserDirectory(
+                settings.Get<string>(settings.DOLPHIN_LOCATION),
+                settings.Get<string>(settings.USER_FOLDER_PATH)
+            )
+        );
 
     public OperationResult Link(string userFolderPath)
     {
@@ -112,7 +126,7 @@ public sealed class RecompDolphinDataService(ISettingsManager settings, IRecompS
         if (source is null)
             return Fail("No Dolphin Wii data folder was found to copy.");
 
-        var destination = PathManager.RecompNandCopyFolderPath;
+        var destination = paths.NandCopyFolderPath;
         var staging = destination + ".copy-" + Guid.NewGuid().ToString("N");
         var backup = destination + ".backup-" + Guid.NewGuid().ToString("N");
         try
@@ -147,8 +161,8 @@ public sealed class RecompDolphinDataService(ISettingsManager settings, IRecompS
 
     public OperationResult ApplyNandToRecompConfig()
     {
-        var configPaths = new[] { RecompBackend.Normal, RecompBackend.OpenXR }
-            .Select(backend => backend.Config(PathManager.WheelWizardAppdataPath))
+        // Both backends share the normal installation's NAND, so both configurations point at it.
+        var configPaths = new[] { paths.ConfigFilePath, RecompBackend.OpenXR.Config(applicationData.DirectoryPath) }
             .Where(fileSystem.File.Exists)
             .ToArray();
         var snapshots = configPaths.ToDictionary(path => path, fileSystem.File.ReadAllText);
@@ -159,7 +173,7 @@ public sealed class RecompDolphinDataService(ISettingsManager settings, IRecompS
             var selected = NandFolderPath;
             if (IsSharingEnabled && selected is null)
                 return Fail("The shared Dolphin NAND is missing. Relink it before launching.");
-            var nand = selected ?? PathManager.RecompPrivateNandFolderPath;
+            var nand = selected ?? paths.PrivateNandFolderPath;
             if (selected is not null && !fileSystem.Directory.Exists(nand))
                 return Fail("The configured shared NAND is missing. Restore or relink it before launching.");
             fileSystem.Directory.CreateDirectory(nand);
@@ -172,17 +186,17 @@ public sealed class RecompDolphinDataService(ISettingsManager settings, IRecompS
                     : fileSystem.Path.GetFullPath(previous, configDirectory);
                 if (
                     string.Equals(
-                        Path.TrimEndingDirectorySeparator(effective),
-                        Path.TrimEndingDirectorySeparator(nand),
+                        fileSystem.Path.TrimEndingDirectorySeparator(effective),
+                        fileSystem.Path.TrimEndingDirectorySeparator(nand),
                         StringComparison.OrdinalIgnoreCase
                     )
                 )
                     continue;
-                var stored = Path.GetRelativePath(fileSystem.Path.GetDirectoryName(path)!, nand).Replace('\\', '/');
+                var stored = fileSystem.Path.GetRelativePath(fileSystem.Path.GetDirectoryName(path)!, nand).Replace('\\', '/');
                 RecompConfig.Set(fileSystem, path, "paths", "nand_root", RecompConfig.Quote(stored));
             }
             _nandChoiceChanged = false;
-            recompSettings.ReloadSettings();
+            recompSettings.ReloadSettings(backendSelection.ConfigPath);
             return Ok();
         }
         catch (Exception exception)

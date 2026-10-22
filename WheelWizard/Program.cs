@@ -1,12 +1,17 @@
-using System.Runtime.InteropServices;
 using Avalonia;
 using Avalonia.Logging;
 using Serilog;
-using WheelWizard.Helpers;
-using WheelWizard.Services.UrlProtocol;
+using Testably.Abstractions;
+using WheelWizard.ApplicationData;
+using WheelWizard.ApplicationIntegration;
+using WheelWizard.ApplicationLifecycle.Logging;
+using WheelWizard.MiiImages.Views;
 using WheelWizard.Settings;
+using WheelWizard.Shared.Platform;
 using WheelWizard.Shared.Services;
 using WheelWizard.Views;
+using WheelWizard.Views.Shell;
+using WheelWizard.Views.Shell.Startup;
 
 namespace WheelWizard;
 
@@ -16,17 +21,33 @@ public class Program : IDesignerEntryPoint
     [STAThread]
     public static void Main(string[] args)
     {
-        // Make sure this is the first action on startup!
-        SetupWorkingDirectory();
-
-        // Create a static logger instance for the application
-        Logging.CreateStaticLogger();
-        RegisterGlobalExceptionLogging();
-
+        ServiceProvider? serviceProvider = null;
         try
         {
-            // Initialize the Avalonia application
-            var builder = CreateWheelWizardApp(isDesigner: false);
+            var builder = CreateWheelWizardApp(async () =>
+            {
+                serviceProvider = await Task.Run(() =>
+                {
+                    // Resolve paths before any application-data or logging work.
+                    SetupWorkingDirectory();
+                    var applicationData = ApplicationDataComposition.CreateLocation(new RealFileSystem(), new RuntimeEnvironment());
+                    var logFiles = new ApplicationLogFiles(applicationData, new LogFileFactory(new RealFileSystem()));
+                    Log.Logger = CreateLoggerWithRecovery(applicationData, logFiles);
+                    ApplicationLogging.LogStartup(Log.Logger);
+                    RegisterGlobalExceptionLogging();
+                    var services = new ServiceCollection();
+                    services.AddWheelWizardServices(applicationData);
+                    services.AddSingleton(logFiles);
+                    return services.BuildServiceProvider(new ServiceProviderOptions { ValidateOnBuild = true, ValidateScopes = true });
+                });
+                Logger.Sink = serviceProvider.GetRequiredService<AvaloniaLoggerAdapter>();
+                var app = (App)Application.Current!;
+                app.LoadVisualResources();
+                Setup(serviceProvider);
+                serviceProvider.GetRequiredService<MiiControlThemes>().Install(app.Resources);
+                serviceProvider.GetRequiredService<WindowAppearance>().Install(app.Resources);
+                return serviceProvider.GetRequiredService<IDesktopStartup>();
+            });
 
             // Start the application
             builder.StartWithClassicDesktopLifetime(args);
@@ -37,11 +58,55 @@ public class Program : IDesignerEntryPoint
         }
         finally
         {
+            serviceProvider?.Dispose();
             Log.CloseAndFlush();
         }
     }
 
-    public static AppBuilder BuildAvaloniaApp() => CreateWheelWizardApp(isDesigner: true);
+    // X11 must opt in to drawn decorations for our extended title bars.
+#pragma warning disable AVALONIA_X11_CSD
+    public static AppBuilder BuildAvaloniaApp() =>
+        AppBuilder
+            .Configure<App>()
+            .UsePlatformDetect()
+            .With(new X11PlatformOptions { EnableDrawnDecorations = true })
+            .With(MacOptions)
+            .WithInterFont();
+#pragma warning restore AVALONIA_X11_CSD
+
+    /// <summary>
+    /// macOS defaults to Metal, but the realtime Mii view draws with OpenGL and can only share the compositor's
+    /// context when that is OpenGL too. Metal stays as a fallback for systems without OpenGL.
+    /// </summary>
+    private static AvaloniaNativePlatformOptions MacOptions =>
+        new()
+        {
+            RenderingMode = [AvaloniaNativeRenderingMode.OpenGl, AvaloniaNativeRenderingMode.Metal, AvaloniaNativeRenderingMode.Software],
+        };
+
+    /// <summary>
+    /// Creates the logger, resetting the application data location once when its logs directory is unusable.
+    /// </summary>
+    private static Serilog.Core.Logger CreateLoggerWithRecovery(IApplicationDataLocation applicationData, ApplicationLogFiles logFiles)
+    {
+        try
+        {
+            return ApplicationLogging.CreateLogger(logFiles);
+        }
+        catch (Exception e)
+        {
+            Console.WriteLine(e);
+            Console.WriteLine("Resetting the Wheel Wizard directory due to an error");
+            var resetWasSuccessful = applicationData.TryReset(out var errorMessage);
+            if (!string.IsNullOrWhiteSpace(errorMessage))
+                Console.WriteLine($"Error message recorded when the Wheel Wizard directory was reset: {errorMessage}");
+            if (!resetWasSuccessful)
+                throw;
+
+            // Retry only once, against the location the reset restored.
+            return ApplicationLogging.CreateLogger(logFiles);
+        }
+    }
 
     private static void RegisterGlobalExceptionLogging()
     {
@@ -66,39 +131,39 @@ public class Program : IDesignerEntryPoint
     /// <summary>
     /// Configures the WheelWizard application.
     /// </summary>
-    private static AppBuilder CreateWheelWizardApp(bool isDesigner)
+    private static AppBuilder CreateWheelWizardApp(Func<Task<IDesktopStartup>> createStartup)
     {
-        var builder = AppBuilder.Configure<App>().UsePlatformDetect().WithInterFont();
+        var isFlatpak = new RuntimeEnvironment().IsFlatpakSandboxed(new RealFileSystem());
+        var flatpakAppId = isFlatpak ? Environment.GetEnvironmentVariable("FLATPAK_ID") : null;
+#pragma warning disable AVALONIA_X11_CSD
+        var x11Options = new X11PlatformOptions { EnableDrawnDecorations = true };
+#pragma warning restore AVALONIA_X11_CSD
+        x11Options.WmClass = flatpakAppId ?? x11Options.WmClass;
+        var builder = AppBuilder
+            .Configure(() => new App(createStartup))
+            .UsePlatformDetect()
+            .With(x11Options)
+            .With(MacOptions)
+            .WithInterFont();
 
-        var services = new ServiceCollection();
-        services.AddWheelWizardServices();
-
-        var serviceProvider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateOnBuild = true, ValidateScopes = true });
-
-        // Override the default TraceLogSink with our AvaloniaLoggerAdapter
-        Logger.Sink = serviceProvider.GetRequiredService<AvaloniaLoggerAdapter>();
-
-        // First, set up the application instance
-        builder.AfterSetup(appBuilder =>
+        // https://docs.avaloniaui.net/docs/platform-specific-guides/linux#enabling-the-wayland-backend
+        // NOTE: UseWayland() will prevent fallback to X11.
+        if (OperatingSystem.IsLinux() && Environment.GetEnvironmentVariable("WAYLAND_DISPLAY") is not null)
         {
-            if (appBuilder.Instance is not App app)
-                throw new InvalidOperationException("The application instance is not of type App.");
-
-            // Set the service provider in the application instance
-            app.SetServiceProvider(serviceProvider);
-
-            // Make sure this comes AFTER setting the service provider
-            // of the `App` instance! Otherwise, things like logging will not work
-            // in `Setup`.
-            Setup(serviceProvider);
-        });
+#pragma warning disable AVALONIA_WAYLAND_FORCE_CSD
+            var waylandOptions = new WaylandPlatformOptions { ForceDrawnDecorations = true };
+#pragma warning restore AVALONIA_WAYLAND_FORCE_CSD
+            waylandOptions.AppId = flatpakAppId ?? waylandOptions.AppId;
+            builder = builder.With(waylandOptions).UseWayland();
+        }
 
         return builder;
     }
 
     private static void SetupWorkingDirectory()
     {
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux) && EnvHelper.IsFlatpakSandboxed())
+        var fileSystem = new RealFileSystem();
+        if (new RuntimeEnvironment().IsFlatpakSandboxed(fileSystem))
         {
             // In this case, we would not want executable directory-relative paths, since this is in `/app/bin`.
             // We are going to use the home directory instead (this should be the original working directory anyway).
@@ -107,7 +172,7 @@ public class Program : IDesignerEntryPoint
         else
         {
             // Resolve all relative paths based on the WheelWizard executable's directory by default
-            var executableDirectory = Path.GetDirectoryName(Environment.ProcessPath);
+            var executableDirectory = fileSystem.Path.GetDirectoryName(Environment.ProcessPath);
             if (!string.IsNullOrWhiteSpace(executableDirectory))
                 Environment.CurrentDirectory = executableDirectory;
         }
@@ -118,7 +183,7 @@ public class Program : IDesignerEntryPoint
         var whWzBaseDir = Environment.GetEnvironmentVariable("WW_BASEDIR") ?? string.Empty;
         try
         {
-            var whWzBaseDirAbsolute = Path.GetFullPath(whWzBaseDir);
+            var whWzBaseDirAbsolute = fileSystem.Path.GetFullPath(whWzBaseDir);
             Environment.CurrentDirectory = whWzBaseDirAbsolute;
         }
         catch
@@ -130,6 +195,8 @@ public class Program : IDesignerEntryPoint
     private static void Setup(IServiceProvider serviceProvider)
     {
         serviceProvider.GetRequiredService<ISettingsStartupInitializer>().Initialize();
-        UrlProtocolManager.SetWhWzScheme();
+        var registration = serviceProvider.GetRequiredService<IUrlProtocolRegistration>().EnsureRegistered(Environment.ProcessPath);
+        if (registration.IsFailure)
+            Log.Warning(registration.Error.Exception, "URL protocol registration failed: {Message}", registration.Error.Message);
     }
 }

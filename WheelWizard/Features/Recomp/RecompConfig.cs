@@ -38,9 +38,9 @@ public static class RecompConfig
             return null;
         if (value.Length < 2 || (value[0] != '"' && value[0] != '\'') || value[^1] != value[0])
             throw new InvalidDataException($"Invalid {section}.{key} in {path}.");
-        var setting = new RecompSetting(typeof(string), (section, key), "", _ => { });
+        var setting = new RecompSetting<string>((section, key), "", _ => { });
         setting.SetFromString(value, skipSave: true);
-        return (string)setting.Get();
+        return setting.Get();
     }
 
     private static string? ReadLiteral(IFileSystem fs, string path, string section, string key)

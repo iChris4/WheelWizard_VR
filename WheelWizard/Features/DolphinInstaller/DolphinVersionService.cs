@@ -1,5 +1,6 @@
-using System.Runtime.InteropServices;
-using WheelWizard.Services;
+using WheelWizard.Dolphin.Paths;
+using WheelWizard.Shared.Platform;
+using WheelWizard.Shared.Processes;
 
 namespace WheelWizard.DolphinInstaller;
 
@@ -12,14 +13,15 @@ public interface IDolphinVersionService
     (DolphinVersionStatus Status, string? Version) CheckConfiguredDolphin();
 }
 
-public sealed class DolphinVersionService(ILinuxProcessService processService) : IDolphinVersionService
+public sealed class DolphinVersionService(IUnixProcessService processService, IDolphinPaths paths, IRuntimeEnvironment environment)
+    : IDolphinVersionService
 {
     public (DolphinVersionStatus Status, string? Version) CheckConfiguredDolphin()
     {
         string? versionText;
         try
         {
-            versionText = ReadVersionText(PathManager.DolphinFilePath);
+            versionText = ReadVersionText(paths.ExecutablePath);
         }
         catch
         {
@@ -39,17 +41,16 @@ public sealed class DolphinVersionService(ILinuxProcessService processService) :
         // Invoke the configured Dolphin the way LaunchDolphin does, just with --version.
         string stdOut;
         string stdErr;
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        if (environment.IsWindows)
         {
             var windowsResult = processService.Run(dolphinLocation, "--version", out stdOut, out stdErr);
             return ReadOutput(windowsResult, stdOut, stdErr);
         }
 
         // a broken Qt platform configuration should not be what stops us from reading the version.
-        // + flatpak dolphin runs in its own environment, so passing it here should not reach it anyway.
         List<string> arguments = [];
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux) && !PathManager.IsFlatpakDolphinFilePath(dolphinLocation))
-            arguments.Add("QT_QPA_PLATFORM=xcb");
+        if (paths.Layout.IsFlatpakSandboxed() || environment.IsLinux && !paths.Layout.IsFlatpakDolphinFilePath(dolphinLocation))
+            arguments.Add("QT_QPA_PLATFORM=wayland;xcb");
 
         arguments.AddRange(["sh", "-c", "--", $"{dolphinLocation} --version"]);
 

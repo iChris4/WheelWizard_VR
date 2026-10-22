@@ -1,0 +1,376 @@
+﻿<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:loc="clr-namespace:WheelWizard.Localization"
+             xmlns:components="clr-namespace:WheelWizard.Views.Components"
+             mc:Ignorable="d" d:DesignWidth="444" d:DesignHeight="716"
+             x:Class="WheelWizard.Settings.Views.RecompSettings">
+    <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="0,10,0,0">
+            <Grid Margin="0,-10,0,10" MinHeight="40" x:Name="NotInstalledText" IsVisible="False">
+                <Border Background="{StaticResource Warning600}"
+                        CornerRadius="9999"
+                        Effect="blur(150)"
+                        Opacity="0.1" />
+                <Border Background="{StaticResource Neutral700}"
+                        BorderBrush="{StaticResource Warning500}"
+                        BorderThickness="1"
+                        CornerRadius="{StaticResource GlobalCornerRadius}">
+                    <Grid ColumnDefinitions="40,*">
+                        <PathIcon Data="{StaticResource WarningTip}"
+                                  Foreground="{StaticResource Warning500}"
+                                  Width="20" />
+                        <SelectableTextBlock Grid.Column="1"
+                                             Margin="0,6,10,6"
+                                             Classes="BodyText"
+                                             TextWrapping="Wrap"
+                                             VerticalAlignment="Center"
+                                             Text="{loc:T status.recomp_not_installed}"
+                                             Foreground="{StaticResource Neutral200}" />
+                    </Grid>
+                </Border>
+            </Grid>
+
+            <components:FormFieldLabel x:Name="VideoSectionLabel"
+                                       Text="{loc:T section.recomp_video}"
+                                       Margin="0,0,0,4" />
+            <StackPanel x:Name="VideoBorder"
+                        Spacing="4"
+                        Margin="0,0,0,7">
+                <Border Classes="SettingsBlockStyle SettingsRowStyle SettingsRowTop">
+                    <Grid ColumnDefinitions="*,Auto" MinHeight="40">
+                        <StackPanel Grid.Column="0"
+                                    Margin="0,0,16,0"
+                                    Spacing="3"
+                                    HorizontalAlignment="Left"
+                                    VerticalAlignment="Center">
+                            <components:FormFieldLabel Text="{loc:T option.recomp_resolution}" />
+                            <SelectableTextBlock Classes="TinyText"
+                                       Text="{loc:T helper_text.resolution_scale}"
+                                       TextAlignment="Left"
+                                       TextWrapping="Wrap" />
+                        </StackPanel>
+                        <components:Dropdown Grid.Column="1"
+                                  x:Name="ResolutionDropdown"
+                                  HorizontalAlignment="Right"
+                                  VerticalAlignment="Center" />
+                    </Grid>
+                </Border>
+
+                <Border Classes="SettingsBlockStyle SettingsRowStyle SettingsRowMiddle">
+                    <Grid ColumnDefinitions="*,Auto" MinHeight="40">
+                        <StackPanel Grid.Column="0"
+                                    Margin="0,0,16,0"
+                                    Spacing="3"
+                                    HorizontalAlignment="Left"
+                                    VerticalAlignment="Center">
+                            <components:FormFieldLabel Text="{loc:T option.recomp_graphics_api}" />
+                            <SelectableTextBlock Classes="TinyText"
+                                       Text="{loc:T helper_text.recomp_graphics_api}"
+                                       TextAlignment="Left"
+                                       TextWrapping="Wrap" />
+                            <TextBlock x:Name="GraphicsApiVrNote"
+                                       Classes="TinyText"
+                                       IsVisible="False"
+                                       TextWrapping="Wrap"
+                                       Text="DirectX 12 is the tested headset path. Vulkan also drives the headset, but only on a WiiCompiled build whose Dawn library supports it; on any other build VR startup fails and the game opens on the desktop." />
+                        </StackPanel>
+                        <components:Dropdown Grid.Column="1"
+                                  x:Name="GraphicsApiDropdown"
+                                  PlaceholderText="Auto"
+                                  HorizontalAlignment="Right"
+                                  VerticalAlignment="Center" />
+                    </Grid>
+                </Border>
+
+                <Border Classes="SettingsBlockStyle SettingsRowStyle SettingsRowMiddle">
+                    <Grid ColumnDefinitions="*,Auto" MinHeight="40">
+                        <components:FormFieldLabel Grid.Column="0"
+                                                   Margin="0,0,16,0"
+                                                   HorizontalAlignment="Left"
+                                                   VerticalAlignment="Center"
+                                                   Text="{loc:T option.show_fps}" />
+                        <components:ToggleCheckBox Grid.Column="1"
+                                  x:Name="ShowFps"
+                                  Variant="Switch"
+                                  HorizontalAlignment="Right"
+                                  VerticalAlignment="Center" />
+                    </Grid>
+                </Border>
+
+                <Border Classes="SettingsBlockStyle SettingsRowStyle SettingsRowBottom">
+                    <Grid ColumnDefinitions="*,Auto" MinHeight="40">
+                        <StackPanel Grid.Column="0"
+                                    Margin="0,0,16,0"
+                                    Spacing="3"
+                                    HorizontalAlignment="Left"
+                                    VerticalAlignment="Center">
+                            <components:FormFieldLabel Text="{loc:T option.recomp_prevent_stutters}" />
+                            <SelectableTextBlock Classes="TinyText"
+                                       Text="{loc:T helper_text.recomp_prevent_stutters}"
+                                       TextAlignment="Left"
+                                       TextWrapping="Wrap" />
+                        </StackPanel>
+                        <components:ToggleCheckBox Grid.Column="1"
+                                  x:Name="PreventStutters"
+                                  Variant="Switch"
+                                  HorizontalAlignment="Right"
+                                  VerticalAlignment="Center" />
+                    </Grid>
+                </Border>
+            </StackPanel>
+
+            <StackPanel x:Name="VrSection" IsVisible="False">
+            <components:FormFieldLabel Text="Virtual reality" Margin="0,10,0,4" />
+            <SelectableTextBlock Classes="TinyText" TextWrapping="Wrap" Margin="0,0,0,6"
+                                 Text="Changes apply on the next launch. The default recenter key in game is F9. The race camera has its own tab." />
+            <StackPanel Spacing="4" Margin="0,0,0,7">
+                <Border Classes="SettingsBlockStyle SettingsRowStyle SettingsRowTop">
+                    <Grid ColumnDefinitions="*,Auto" MinHeight="40">
+                        <StackPanel Grid.Column="0"
+                                    Margin="0,0,16,0"
+                                    Spacing="3"
+                                    HorizontalAlignment="Left"
+                                    VerticalAlignment="Center">
+                            <components:FormFieldLabel Text="Enable OpenXR" />
+                            <SelectableTextBlock Classes="TinyText"
+                                       Text="Turn off to play this installation on desktop. If a headset is unavailable, desktop fallback remains available."
+                                       TextAlignment="Left"
+                                       TextWrapping="Wrap" />
+                        </StackPanel>
+                        <components:ToggleCheckBox Grid.Column="1"
+                                  x:Name="VrEnabled"
+                                  Variant="Switch"
+                                  HorizontalAlignment="Right"
+                                  VerticalAlignment="Center" />
+                    </Grid>
+                </Border>
+
+                <Border Classes="SettingsBlockStyle SettingsRowStyle SettingsRowMiddle">
+                    <Grid ColumnDefinitions="*,Auto" MinHeight="40">
+                        <StackPanel Grid.Column="0"
+                                    Margin="0,0,16,0"
+                                    Spacing="3"
+                                    HorizontalAlignment="Left"
+                                    VerticalAlignment="Center">
+                            <components:FormFieldLabel Text="Race view" />
+                            <SelectableTextBlock Classes="TinyText"
+                                       Text="Immersive plays races all around you in stereo. Immersive window keeps that stereo view but shows it only through a window where the menu screen sits. Flat screen plays races on the menu screen; the Camera tab's settings do not apply to it."
+                                       TextAlignment="Left"
+                                       TextWrapping="Wrap" />
+                        </StackPanel>
+                        <components:Dropdown Grid.Column="1"
+                                  x:Name="VrRaceViewDropdown"
+                                  HorizontalAlignment="Right"
+                                  VerticalAlignment="Center" />
+                    </Grid>
+                </Border>
+
+                <Border x:Name="VrRaceIntroRow" Classes="SettingsBlockStyle SettingsRowStyle SettingsRowMiddle">
+                    <Grid ColumnDefinitions="*,Auto" MinHeight="40">
+                        <StackPanel Grid.Column="0"
+                                    Margin="0,0,16,0"
+                                    Spacing="3"
+                                    HorizontalAlignment="Left"
+                                    VerticalAlignment="Center">
+                            <components:FormFieldLabel Text="Race intro" />
+                            <SelectableTextBlock Classes="TinyText"
+                                       Text="How each race's intro, the course preview before the countdown, is shown. Flat screen plays it on the menu screen, and the race turns immersive at the countdown, as the cockpit camera takes over. Immersive shows it as the race view does."
+                                       TextAlignment="Left"
+                                       TextWrapping="Wrap" />
+                        </StackPanel>
+                        <components:Dropdown Grid.Column="1"
+                                  x:Name="VrRaceIntroDropdown"
+                                  HorizontalAlignment="Right"
+                                  VerticalAlignment="Center" />
+                    </Grid>
+                </Border>
+
+                <Border Classes="SettingsBlockStyle SettingsRowStyle SettingsRowMiddle">
+                    <Grid ColumnDefinitions="*,Auto" MinHeight="40">
+                        <StackPanel Grid.Column="0"
+                                    Margin="0,0,16,0"
+                                    Spacing="3"
+                                    HorizontalAlignment="Left"
+                                    VerticalAlignment="Center">
+                            <components:FormFieldLabel Text="Desktop view" />
+                            <SelectableTextBlock Classes="TinyText"
+                                       Text="Choose what the desktop window shows while the headset is running."
+                                       TextAlignment="Left"
+                                       TextWrapping="Wrap" />
+                        </StackPanel>
+                        <components:Dropdown Grid.Column="1"
+                                  x:Name="VrMirrorDropdown"
+                                  HorizontalAlignment="Right"
+                                  VerticalAlignment="Center" />
+                    </Grid>
+                </Border>
+
+                <Border Classes="SettingsBlockStyle SettingsRowStyle SettingsRowMiddle">
+                    <Grid ColumnDefinitions="*,Auto" MinHeight="40">
+                        <StackPanel Grid.Column="0"
+                                    Margin="0,0,16,0"
+                                    Spacing="3"
+                                    HorizontalAlignment="Left"
+                                    VerticalAlignment="Center">
+                            <components:FormFieldLabel Text="Headset render scale" />
+                            <SelectableTextBlock Classes="TinyText"
+                                       Text="Higher values improve clarity and increase GPU load. Applies on the next launch."
+                                       TextAlignment="Left"
+                                       TextWrapping="Wrap" />
+                        </StackPanel>
+                        <components:Dropdown Grid.Column="1"
+                                  x:Name="VrRenderScaleDropdown"
+                                  HorizontalAlignment="Right"
+                                  VerticalAlignment="Center" />
+                    </Grid>
+                </Border>
+
+                <Border Classes="SettingsBlockStyle SettingsRowStyle SettingsRowBottom">
+                    <Grid ColumnDefinitions="*,Auto" MinHeight="40">
+                        <StackPanel Grid.Column="0"
+                                    Margin="0,0,16,0"
+                                    Spacing="3"
+                                    HorizontalAlignment="Left"
+                                    VerticalAlignment="Center">
+                            <components:FormFieldLabel Text="Reset VR settings" />
+                            <SelectableTextBlock Classes="TinyText"
+                                       Text="Puts every setting on this tab's Virtual reality rows and the Camera tab back to its default, with those only the in-game settings show. Enable OpenXR keeps its choice."
+                                       TextAlignment="Left"
+                                       TextWrapping="Wrap" />
+                        </StackPanel>
+                        <components:ActionButton Grid.Column="1"
+                                           x:Name="ResetVrSettingsButton"
+                                           Tone="Secondary"
+                                           Size="Compact"
+                                           IconData="{StaticResource RotateLeft}"
+                                           Text="Reset"
+                                           HorizontalAlignment="Right"
+                                           VerticalAlignment="Center"
+                                           Click="ResetVrSettings_OnClick" />
+                    </Grid>
+                </Border>
+            </StackPanel>
+            </StackPanel>
+
+            <components:FormFieldLabel x:Name="InstallationSectionLabel"
+                                       Text="{loc:T section.setup}" Margin="0,10,0,4" />
+            <StackPanel x:Name="InstallationBorder"
+                        Spacing="4"
+                        Margin="0,0,0,7">
+                <Border Classes="SettingsBlockStyle SettingsRowStyle SettingsRowTop">
+                    <Grid ColumnDefinitions="*,Auto" MinHeight="40">
+                        <StackPanel Grid.Column="0"
+                                    Margin="0,0,16,0"
+                                    Spacing="3"
+                                    HorizontalAlignment="Left"
+                                    VerticalAlignment="Center">
+                            <StackPanel Orientation="Horizontal" Spacing="5">
+                                <components:FormFieldLabel Text="{loc:T option.recomp_share_dolphin_data}" />
+                                <PathIcon x:Name="SharedNandWarningIcon"
+                                          IsVisible="False"
+                                          Data="{StaticResource WarningTriangle}"
+                                          Foreground="{StaticResource Warning600}"
+                                          ToolTip.Tip="{loc:T helper_text.recomp_shared_nand_warning}"
+                                          ToolTip.Placement="Top"
+                                          ToolTip.ShowDelay="50"
+                                          Width="14"
+                                          Height="14" />
+                            </StackPanel>
+                            <SelectableTextBlock Classes="TinyText"
+                                                 Text="{loc:T helper_text.recomp_share_dolphin_data}"
+                                                 TextAlignment="Left"
+                                                 TextWrapping="Wrap" />
+                        </StackPanel>
+                        <components:ToggleCheckBox Grid.Column="1"
+                                  x:Name="ShareDolphinData"
+                                  Variant="Switch"
+                                  HorizontalAlignment="Right"
+                                  VerticalAlignment="Center" />
+                    </Grid>
+                </Border>
+
+                <Border Classes="SettingsBlockStyle SettingsRowStyle SettingsRowMiddle">
+                    <Grid ColumnDefinitions="*,Auto" MinHeight="40">
+                        <StackPanel Grid.Column="0"
+                                    Margin="0,0,16,0"
+                                    Spacing="3"
+                                    HorizontalAlignment="Left"
+                                    VerticalAlignment="Center">
+                            <components:FormFieldLabel Text="{loc:T option.recomp_clone_dolphin_data}" />
+                            <SelectableTextBlock Classes="TinyText"
+                                                 Text="{loc:T helper_text.recomp_clone_dolphin_data}"
+                                                 TextAlignment="Left"
+                                                 TextWrapping="Wrap" />
+                            <SelectableTextBlock x:Name="DolphinCloneStatus"
+                                                 Classes="TinyText"
+                                                 TextAlignment="Left"
+                                                 TextWrapping="Wrap" />
+                        </StackPanel>
+                        <components:ActionButton Grid.Column="1"
+                                           x:Name="CloneDolphinDataButton"
+                                           Tone="Secondary"
+                                           Size="Compact"
+                                           Text="{loc:T action.clone}"
+                                           IconData="{StaticResource Duplicate}"
+                                           HorizontalAlignment="Right"
+                                           VerticalAlignment="Center"
+                                           Click="CloneDolphinData_OnClick" />
+                    </Grid>
+                </Border>
+
+                <Border Classes="SettingsBlockStyle SettingsRowStyle SettingsRowMiddle">
+                    <Grid ColumnDefinitions="*,Auto" MinHeight="40">
+                        <StackPanel Grid.Column="0"
+                                    Margin="0,0,16,0"
+                                    Spacing="3"
+                                    HorizontalAlignment="Left"
+                                    VerticalAlignment="Center">
+                            <components:FormFieldLabel Text="{loc:T option.installation_folder}" />
+                            <SelectableTextBlock x:Name="InstallLocationText"
+                                       Classes="TinyText"
+                                       TextAlignment="Left"
+                                       TextWrapping="Wrap" />
+                        </StackPanel>
+                        <components:ActionButton Grid.Column="1"
+                                           x:Name="OpenInstallFolder"
+                                           Tone="Secondary"
+                                           Size="Compact"
+                                           IconData="{StaticResource Folder}"
+                                           Text="{loc:T action.open}"
+                                           HorizontalAlignment="Right"
+                                           VerticalAlignment="Center"
+                                           Click="OpenInstallFolder_OnClick" />
+                    </Grid>
+                </Border>
+
+                <Border Classes="SettingsBlockStyle SettingsRowStyle SettingsRowBottom">
+                    <Grid ColumnDefinitions="*,Auto" MinHeight="40">
+                        <StackPanel Grid.Column="0"
+                                    Margin="0,0,16,0"
+                                    Spacing="3"
+                                    HorizontalAlignment="Left"
+                                    VerticalAlignment="Center">
+                            <components:FormFieldLabel Text="{loc:T option.recomp_installation}" />
+                            <SelectableTextBlock x:Name="WiiCompiledVersionText"
+                                       Classes="TinyText"
+                                       TextAlignment="Left"
+                                       TextWrapping="Wrap" />
+                        </StackPanel>
+                        <components:ActionButton Grid.Column="1"
+                                           x:Name="UninstallButton"
+                                           Tone="Danger"
+                                           Size="Compact"
+                                           IconData="{StaticResource Trash}"
+                                           Text="{loc:T action.un_install}"
+                                           HorizontalAlignment="Right"
+                                           VerticalAlignment="Center"
+                                           Click="Uninstall_OnClick" />
+                    </Grid>
+                </Border>
+            </StackPanel>
+            <Border Classes="SettingsBottomSpacer" />
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

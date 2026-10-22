@@ -1,5 +1,4 @@
 using Testably.Abstractions.Testing;
-using WheelWizard.Services;
 using WheelWizard.Settings;
 using WheelWizard.Settings.Types;
 
@@ -11,7 +10,7 @@ public class DolphinSettingTests
     [Fact]
     public void Constructor_Throws_WhenFileNameIsNotIni()
     {
-        var action = () => new DolphinSetting(typeof(string), ("Dolphin.cfg", "General", "NANDRootPath"), "value");
+        var action = () => new DolphinSetting<string>(("Dolphin.cfg", "General", "NANDRootPath"), "value");
 
         Assert.Throws<ArgumentException>(action);
     }
@@ -19,8 +18,7 @@ public class DolphinSettingTests
     [Fact]
     public void SetFromString_ParsesEnumAndFormatsAsIntegerString()
     {
-        var setting = new DolphinSetting(
-            typeof(DolphinShaderCompilationMode),
+        var setting = new DolphinSetting<DolphinShaderCompilationMode>(
             ("GFX.ini", "Settings", "ShaderCompilationMode"),
             DolphinShaderCompilationMode.Default
         );
@@ -35,9 +33,7 @@ public class DolphinSettingTests
     [Fact]
     public void Set_ReturnsFalseAndKeepsOldValue_WhenValidationFails()
     {
-        var setting = new DolphinSetting(typeof(int), ("GFX.ini", "Settings", "InternalResolution"), 1).SetValidation(value =>
-            (int)value! >= 0
-        );
+        var setting = new DolphinSetting<int>(("GFX.ini", "Settings", "InternalResolution"), 1).SetValidation(value => value >= 0);
         setting.Set(2);
 
         var result = setting.Set(-1);
@@ -47,54 +43,54 @@ public class DolphinSettingTests
     }
 
     [Fact]
-    public void SetFromString_Throws_WhenTypeIsUnsupported()
+    public void SetFromString_ParsesTypedNumbers()
     {
-        var setting = new DolphinSetting(typeof(decimal), ("GFX.ini", "Settings", "Price"), 1m);
+        var setting = new DolphinSetting<decimal>(("GFX.ini", "Settings", "Price"), 1m);
 
-        Assert.Throws<InvalidOperationException>(() => setting.SetFromString("3.14"));
+        Assert.True(setting.SetFromString("3.14"));
+        Assert.Equal(3.14m, setting.Value);
     }
 }
 
 [Collection("SettingsFeature")]
-public class DolphinSettingManagerTests : IDisposable
+public class DolphinSettingManagerTests
 {
     [Fact]
     public void LoadSettings_ReadsExistingValue_FromIniFile()
     {
         var fileSystem = new MockFileSystem();
         var userFolderPath = $"/wheelwizard-user-{Guid.NewGuid():N}";
-        SettingsTestUtils.InitializeSettingsRuntime(userFolderPath);
-        var configFolderPath = PathManager.ConfigFolderPath;
+        var configFolderPath = fileSystem.Path.Combine(userFolderPath, "Config");
         var iniPath = Path.Combine(configFolderPath, "Dolphin.ini");
         fileSystem.Directory.CreateDirectory(configFolderPath);
         fileSystem.File.WriteAllLines(iniPath, ["[General]", "NANDRootPath = /persisted"]);
         var manager = new DolphinSettingManager(fileSystem);
-        var setting = new DolphinSetting(typeof(string), ("Dolphin.ini", "General", "NANDRootPath"), "/default");
+        var setting = new DolphinSetting<string>(("Dolphin.ini", "General", "NANDRootPath"), "/default");
 
         manager.RegisterSetting(setting);
-        manager.LoadSettings();
+        manager.LoadSettings(configFolderPath);
 
         Assert.Equal("/persisted", Assert.IsType<string>(setting.Get()));
     }
 
     [Fact]
-    public void LoadSettings_WritesDefaultValue_WhenIniEntryIsMissing()
+    public void LoadSettings_UsesDefaultWithoutWriting_WhenIniEntryIsMissing()
     {
         var fileSystem = new MockFileSystem();
         var userFolderPath = $"/wheelwizard-user-{Guid.NewGuid():N}";
-        SettingsTestUtils.InitializeSettingsRuntime(userFolderPath);
-        var configFolderPath = PathManager.ConfigFolderPath;
+        var configFolderPath = fileSystem.Path.Combine(userFolderPath, "Config");
         var iniPath = Path.Combine(configFolderPath, "Dolphin.ini");
         fileSystem.Directory.CreateDirectory(configFolderPath);
         fileSystem.File.WriteAllLines(iniPath, ["[General]", "OtherSetting = 1"]);
         var manager = new DolphinSettingManager(fileSystem);
-        var setting = new DolphinSetting(typeof(string), ("Dolphin.ini", "General", "NANDRootPath"), "/default");
+        var setting = new DolphinSetting<string>(("Dolphin.ini", "General", "NANDRootPath"), "/default");
 
         manager.RegisterSetting(setting);
-        manager.LoadSettings();
+        manager.LoadSettings(configFolderPath);
 
         var updatedFile = fileSystem.File.ReadAllText(iniPath);
-        Assert.Contains("NANDRootPath = /default", updatedFile);
+        Assert.DoesNotContain("NANDRootPath", updatedFile);
+        Assert.Equal("/default", setting.Get());
     }
 
     [Fact]
@@ -102,18 +98,17 @@ public class DolphinSettingManagerTests : IDisposable
     {
         var fileSystem = new MockFileSystem();
         var userFolderPath = $"/wheelwizard-user-{Guid.NewGuid():N}";
-        SettingsTestUtils.InitializeSettingsRuntime(userFolderPath);
-        var configFolderPath = PathManager.ConfigFolderPath;
+        var configFolderPath = fileSystem.Path.Combine(userFolderPath, "Config");
         var iniPath = Path.Combine(configFolderPath, "Dolphin.ini");
         fileSystem.Directory.CreateDirectory(configFolderPath);
         fileSystem.File.WriteAllLines(iniPath, ["[General]", "NANDRootPath = /old"]);
         var manager = new DolphinSettingManager(fileSystem);
-        var setting = new DolphinSetting(typeof(string), ("Dolphin.ini", "General", "NANDRootPath"), "/default");
+        var setting = new DolphinSetting<string>(("Dolphin.ini", "General", "NANDRootPath"), "/default");
 
         manager.RegisterSetting(setting);
-        manager.LoadSettings();
+        manager.LoadSettings(configFolderPath);
         setting.Set("/new", skipSave: true);
-        manager.SaveSettings(setting);
+        manager.SaveSettings(configFolderPath, setting);
 
         var updatedFile = fileSystem.File.ReadAllText(iniPath);
         Assert.Contains("NANDRootPath = /new", updatedFile);
@@ -125,25 +120,18 @@ public class DolphinSettingManagerTests : IDisposable
     {
         var fileSystem = new MockFileSystem();
         var userFolderPath = $"/wheelwizard-user-{Guid.NewGuid():N}";
-        SettingsTestUtils.InitializeSettingsRuntime(userFolderPath);
-        var configFolderPath = PathManager.ConfigFolderPath;
+        var configFolderPath = fileSystem.Path.Combine(userFolderPath, "Config");
         var iniPath = Path.Combine(configFolderPath, "Dolphin.ini");
         fileSystem.Directory.CreateDirectory(configFolderPath);
         fileSystem.File.WriteAllLines(iniPath, ["[General]", "NANDRootPath = /first"]);
         var manager = new DolphinSettingManager(fileSystem);
-        var setting = new DolphinSetting(typeof(string), ("Dolphin.ini", "General", "NANDRootPath"), "/default");
+        var setting = new DolphinSetting<string>(("Dolphin.ini", "General", "NANDRootPath"), "/default");
 
         manager.RegisterSetting(setting);
-        manager.LoadSettings();
+        manager.LoadSettings(configFolderPath);
         fileSystem.File.WriteAllLines(iniPath, ["[General]", "NANDRootPath = /second"]);
-        manager.ReloadSettings();
+        manager.ReloadSettings(configFolderPath);
 
         Assert.Equal("/second", Assert.IsType<string>(setting.Get()));
-    }
-
-    public void Dispose()
-    {
-        SettingsTestUtils.ResetSettingsRuntime();
-        SettingsTestUtils.ResetSignalRuntime();
     }
 }

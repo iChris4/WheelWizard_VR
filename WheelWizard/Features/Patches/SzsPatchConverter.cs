@@ -1,13 +1,15 @@
 using WheelWizard.Features.Archives;
-using WheelWizard.Helpers;
 using static WheelWizard.Features.Patches.PatchConversionHelpers;
 
 namespace WheelWizard.Features.Patches;
 
 public sealed class SzsPatchConverter(ISzsArchiveDecoder archiveDecoder) : ISzsPatchConverter
 {
+    private static readonly System.IO.Abstractions.IPath NativePath = new Testably.Abstractions.RealFileSystem().Path;
+
     public OperationResult<PatchConversionAnalysis> AnalyzeAgainstBaseline(BaselineEntry baseline, string moddedName, byte[] moddedBytes)
     {
+        // #todo: test conversion against real baselines, including changed, added, removed and unsupported archive members.
         if (!string.Equals(baseline.Kind, "szs", StringComparison.OrdinalIgnoreCase))
             return Fail("The selected baseline is not an SZS file.");
 
@@ -16,7 +18,7 @@ public sealed class SzsPatchConverter(ISzsArchiveDecoder archiveDecoder) : ISzsP
         var archiveTag = baseline.ArchiveTag;
 
         if (!StripExtension(moddedName).Equals(archiveTag, StringComparison.OrdinalIgnoreCase))
-            warnings.Add(t("warning.file_name_differs_from_archive_tag", archiveTag)!);
+            warnings.Add(t("warning.file_name_differs_from_archive_tag", new { archiveTag = archiveTag })!);
 
         var wholeFileHash = HashBytes64(moddedBytes);
         var wholeFileMatches = moddedBytes.Length == baseline.WholeFileSize && wholeFileHash == baseline.WholeFileHash;
@@ -74,7 +76,7 @@ public sealed class SzsPatchConverter(ISzsArchiveDecoder archiveDecoder) : ISzsP
 
             if (IsBlockedLooseRawOverrideExtension(logicalPath))
             {
-                skipped.Add(t("warning.unsupported_loose_override_extension", logicalPath)!);
+                skipped.Add(t("warning.unsupported_loose_override_extension", new { fileName = logicalPath })!);
                 continue;
             }
 
@@ -197,7 +199,7 @@ public sealed class SzsPatchConverter(ISzsArchiveDecoder archiveDecoder) : ISzsP
 
     private static bool IsBlockedLooseRawOverrideExtension(string path)
     {
-        var extension = Path.GetExtension(path);
+        var extension = NativePath.GetExtension(path);
         return extension.Equals(".kcl", StringComparison.OrdinalIgnoreCase)
             || extension.Equals(".kmp", StringComparison.OrdinalIgnoreCase)
             || extension.Equals(".slt", StringComparison.OrdinalIgnoreCase);
@@ -205,7 +207,7 @@ public sealed class SzsPatchConverter(ISzsArchiveDecoder archiveDecoder) : ISzsP
 
     private static string StripExtension(string fileName)
     {
-        var extension = Path.GetExtension(fileName);
+        var extension = NativePath.GetExtension(fileName);
         return string.IsNullOrEmpty(extension) ? fileName : fileName[..^extension.Length];
     }
 }

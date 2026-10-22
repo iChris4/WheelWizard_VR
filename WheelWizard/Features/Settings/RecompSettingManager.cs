@@ -1,5 +1,4 @@
 using System.IO.Abstractions;
-using WheelWizard.Services;
 using WheelWizard.Settings.Types;
 
 namespace WheelWizard.Settings;
@@ -8,16 +7,14 @@ namespace WheelWizard.Settings;
 /// Reads and writes the recomp's <c>Config.toml</c> the same way <see cref="DolphinSettingManager"/>
 /// handles Dolphin's ini files. The file has two writers
 /// </summary>
-public class RecompSettingManager(IFileSystem fileSystem, WheelWizard.Recomp.RecompBackendSelection? backendSelection = null)
-    : IRecompSettingManager
+public class RecompSettingManager(IFileSystem fileSystem) : IRecompSettingManager
 {
-    private string ConfigPath => backendSelection?.ConfigPath ?? PathManager.RecompConfigFilePath;
     private readonly object _syncRoot = new();
     private readonly object _fileIoSync = new();
     private bool _loaded;
-    private readonly List<RecompSetting> _settings = [];
+    private readonly List<IRecompSetting> _settings = [];
 
-    public void RegisterSetting(RecompSetting setting)
+    public void RegisterSetting(IRecompSetting setting)
     {
         lock (_syncRoot)
         {
@@ -28,37 +25,35 @@ public class RecompSettingManager(IFileSystem fileSystem, WheelWizard.Recomp.Rec
         }
     }
 
-    public void SaveSettings(RecompSetting invokingSetting)
+    public void SaveSettings(string configPath, IRecompSetting invokingSetting)
     {
         lock (_syncRoot)
         {
             if (!_loaded)
-                return;
+                throw new IOException("The WiiCompiled settings have not been loaded.");
         }
 
         lock (_fileIoSync)
         {
-            WriteTomlSetting(invokingSetting.Section, invokingSetting.Name, invokingSetting.GetStringValue());
+            WriteTomlSetting(configPath, invokingSetting.Section, invokingSetting.Name, invokingSetting.GetStringValue());
         }
     }
 
-    public void ReloadSettings()
+    public void ReloadSettings(string configPath)
     {
         lock (_syncRoot)
         {
             _loaded = false;
-            foreach (var setting in _settings)
-                setting.Set(setting.DefaultValue, skipSave: true);
         }
 
-        LoadSettings();
+        LoadSettings(configPath);
     }
 
-    public void RemoveTomlSetting(string section, string settingToRemove)
+    public void RemoveTomlSetting(string configPath, string section, string settingToRemove)
     {
         lock (_fileIoSync)
         {
-            var lines = ReadTomlFile()?.ToList();
+            var lines = ReadTomlFile(configPath)?.ToList();
             if (lines == null)
                 return;
 
@@ -77,17 +72,17 @@ public class RecompSettingManager(IFileSystem fileSystem, WheelWizard.Recomp.Rec
                     continue;
 
                 lines.RemoveAt(i);
-                fileSystem.File.WriteAllLines(ConfigPath, lines);
+                SettingsFile.WriteLines(fileSystem, configPath, lines);
                 return;
             }
         }
     }
 
-    public void RemoveTomlSettings(string section, IReadOnlyCollection<string> settingsToRemove)
+    public void RemoveTomlSettings(string configPath, string section, IReadOnlyCollection<string> settingsToRemove)
     {
         lock (_fileIoSync)
         {
-            var lines = ReadTomlFile()?.ToList();
+            var lines = ReadTomlFile(configPath)?.ToList();
             if (lines == null)
                 return;
 
@@ -114,14 +109,14 @@ public class RecompSettingManager(IFileSystem fileSystem, WheelWizard.Recomp.Rec
             }
 
             if (removed)
-                fileSystem.File.WriteAllLines(ConfigPath, lines);
+                SettingsFile.WriteLines(fileSystem, configPath, lines);
         }
     }
 
-    public void LoadSettings()
+    public void LoadSettings(string configPath)
     {
-        List<RecompSetting> settingsSnapshot;
-        if (_loaded || !fileSystem.File.Exists(ConfigPath))
+        List<IRecompSetting> settingsSnapshot;
+        if (_loaded)
             return;
 
         lock (_syncRoot)
@@ -140,31 +135,32 @@ public class RecompSettingManager(IFileSystem fileSystem, WheelWizard.Recomp.Rec
                 // A missing or unparsable key keeps the registered default without writing it back:
                 // the runtime falls back to the very same default, so the file stays untouched until
                 // the user actually changes something.
-                var value = ReadTomlSetting(setting.Section, setting.Name);
-                if (value != null)
-                    setting.SetFromString(value, true);
+                string? value;
+                try
+                {
+                    value = ReadTomlSetting(configPath, setting.Section, setting.Name);
+                }
+                catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+                {
+                    value = null;
+                }
+                if (value == null || !setting.SetFromString(value, true))
+                    setting.Reset(skipSave: true);
             }
         }
     }
 
-    private string[]? ReadTomlFile()
+    private string[]? ReadTomlFile(string configPath)
     {
-        if (!fileSystem.File.Exists(ConfigPath))
+        if (!fileSystem.File.Exists(configPath))
             return null;
 
-        try
-        {
-            return fileSystem.File.ReadAllLines(ConfigPath);
-        }
-        catch
-        {
-            return null;
-        }
+        return fileSystem.File.ReadAllLines(configPath);
     }
 
-    private string? ReadTomlSetting(string section, string settingToRead)
+    private string? ReadTomlSetting(string configPath, string section, string settingToRead)
     {
-        var lines = ReadTomlFile();
+        var lines = ReadTomlFile(configPath);
         if (lines == null)
             return null;
 
@@ -193,14 +189,14 @@ public class RecompSettingManager(IFileSystem fileSystem, WheelWizard.Recomp.Rec
         return null;
     }
 
-    private void WriteTomlSetting(string section, string settingToChange, string value)
+    private void WriteTomlSetting(string configPath, string section, string settingToChange, string value)
     {
-        var lines = ReadTomlFile()?.ToList();
+        var lines = ReadTomlFile(configPath)?.ToList();
 
         // The backend owns creating Config.toml; a write before it exists would hand the runtime a
         // file Wheel Wizard invented, so the value simply stays in memory until the next load.
         if (lines == null)
-            return;
+            throw new IOException("The WiiCompiled configuration file is not available.");
 
         var sectionIndex = lines.FindIndex(line => line.Trim() == $"[{section}]");
         if (sectionIndex == -1)
@@ -209,7 +205,7 @@ public class RecompSettingManager(IFileSystem fileSystem, WheelWizard.Recomp.Rec
                 lines.Add(string.Empty);
             lines.Add($"[{section}]");
             lines.Add($"{settingToChange} = {value}");
-            fileSystem.File.WriteAllLines(ConfigPath, lines);
+            SettingsFile.WriteLines(fileSystem, configPath, lines);
             return;
         }
 
@@ -223,12 +219,12 @@ public class RecompSettingManager(IFileSystem fileSystem, WheelWizard.Recomp.Rec
                 continue;
 
             lines[i] = $"{settingToChange} = {value}";
-            fileSystem.File.WriteAllLines(ConfigPath, lines);
+            SettingsFile.WriteLines(fileSystem, configPath, lines);
             return;
         }
 
         lines.Insert(sectionIndex + 1, $"{settingToChange} = {value}");
-        fileSystem.File.WriteAllLines(ConfigPath, lines);
+        SettingsFile.WriteLines(fileSystem, configPath, lines);
     }
 
     private static bool IsSettingLine(string trimmedLine, string settingName) =>

@@ -1,7 +1,8 @@
-﻿using System.IO.Abstractions;
+using System.IO.Abstractions;
 using System.IO.Compression;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using WheelWizard.ApplicationData;
 using WheelWizard.GitHub;
 using WheelWizard.Models.Enums;
 using WheelWizard.Recomp.Domain;
@@ -26,8 +27,8 @@ public interface IRecompInstallService : IDisposable
     bool IsInstalled { get; }
 
     /// <summary>
-    /// Runs the installed <c>WiiCompiled-Setup.exe --version</c> host and returns its semantic version.
-    /// WiiCompiled is Windows-only, so other platforms return <see langword="null"/>.
+    /// Runs the installed setup host with <c>--version</c> and returns its semantic version, or
+    /// <see langword="null"/> when nothing is installed or the host does not answer.
     /// </summary>
     Task<string?> GetInstalledVersionAsync(CancellationToken cancellationToken = default);
 
@@ -139,9 +140,9 @@ public sealed class RecompInstallService : IRecompInstallService
         _game = game;
     }
 
-    // How the three phases of an install divide up the 0-100 progress bar.
-    private const int DownloadPercentFloor = 5;
-    private const int SetupPercentFloor = 35;
+    // #todo: test the real install, repair, launch and uninstall flows with fake dependencies, including cancellation and failures.
+    // Where the setup phase starts on the 0-100 progress bar; the download phase before it lives in the acquirer.
+    private const int SetupPercentFloor = RecompSetupHostAcquirer.SetupPercentFloor;
 
     private const int CurrentInstallStateSchemaVersion = 1;
 
@@ -168,9 +169,12 @@ public sealed class RecompInstallService : IRecompInstallService
 
     private readonly IRecompEnvironment environment;
     private readonly IRecompProcessRunner processRunner;
-    private readonly IRecompSetupDownloader downloader;
+    private readonly RecompSetupHostAcquirer hosts;
     private readonly IRecompRetroWfcPayloadProbe payloadProbe;
+    private readonly IRecompSetupDownloader downloader;
     private readonly IGitHubSingletonService gitHubService;
+    private readonly IRecompPaths paths;
+    private readonly IApplicationDataLocation applicationData;
     private readonly IFileSystem fileSystem;
     private readonly ILogger<RecompInstallService> logger;
 
@@ -183,18 +187,24 @@ public sealed class RecompInstallService : IRecompInstallService
     public RecompInstallService(
         IRecompEnvironment environment,
         IRecompProcessRunner processRunner,
-        IRecompSetupDownloader downloader,
+        RecompSetupHostAcquirer hosts,
         IRecompRetroWfcPayloadProbe payloadProbe,
+        IRecompSetupDownloader downloader,
         IGitHubSingletonService gitHubService,
+        IRecompPaths paths,
+        IApplicationDataLocation applicationData,
         IFileSystem fileSystem,
         ILogger<RecompInstallService> logger
     )
     {
         this.environment = environment;
         this.processRunner = processRunner;
-        this.downloader = downloader;
+        this.hosts = hosts;
         this.payloadProbe = payloadProbe;
+        this.downloader = downloader;
         this.gitHubService = gitHubService;
+        this.paths = paths;
+        this.applicationData = applicationData;
         this.fileSystem = fileSystem;
         this.logger = logger;
     }
@@ -228,9 +238,23 @@ public sealed class RecompInstallService : IRecompInstallService
 
     public async Task<WheelWizardStatus> GetCurrentStatusAsync(CancellationToken cancellationToken = default)
     {
+        // This switch statement should be a no-op on non-Linux/Flatpak systems anyway.
+        switch (environment.GetExtensionConfigurationInfo)
+        {
+            // This would mean that Wheel Wizard is configured to use Dolphin
+            case Settings.ExtensionConfigurationInfo.MissingDolphin:
+                return WheelWizardStatus.ConfigNotFinished;
+
+            case Settings.ExtensionConfigurationInfo.MissingRecomp:
+                return WheelWizardStatus.NoRecompExtension;
+
+            case Settings.ExtensionConfigurationInfo.ExtensionFoundOrNotNeeded:
+                break;
+        }
+
         var state = ReadInstalledState();
         var hasInstalledHost = fileSystem.File.Exists(environment.InstalledSetupFilePath);
-        if (hasInstalledHost && !IsCurrentInstallState(state))
+        if (hasInstalledHost && state != null && !IsCurrentInstallState(state))
             return IsGameFileConfigured() ? WheelWizardStatus.OutOfDate : WheelWizardStatus.ConfigNotFinished;
 
         var installedVersion = IsCurrentInstallState(state) ? state!.SetupVersion : null;
@@ -319,7 +343,7 @@ public sealed class RecompInstallService : IRecompInstallService
     {
         try
         {
-            var installRoot = Path.TrimEndingDirectorySeparator(fileSystem.Path.GetFullPath(environment.InstallFolderPath));
+            var installRoot = fileSystem.Path.TrimEndingDirectorySeparator(fileSystem.Path.GetFullPath(environment.InstallFolderPath));
             var parentFolderPath = fileSystem.Directory.GetParent(installRoot)?.FullName;
             if (parentFolderPath is null || !fileSystem.Directory.Exists(parentFolderPath))
                 return false;
@@ -480,7 +504,13 @@ public sealed class RecompInstallService : IRecompInstallService
         if (hasInstalledHost && await InstalledHostCanRepairAsync(release.TagName, cancellationToken))
             return await RepairWhatTheCheckDemandsAsync(progress, payloadMode, forceRetroRebuild, cancellationToken);
 
-        var setupResult = await EnsureSetupDownloadedAsync(release, progress, cancellationToken);
+        var setupResult = await hosts.EnsureSetupDownloadedAsync(
+            Backend,
+            release,
+            environment.CacheFolderPath,
+            progress,
+            cancellationToken
+        );
         if (setupResult.IsFailure)
             return setupResult.Error;
 
@@ -595,7 +625,7 @@ public sealed class RecompInstallService : IRecompInstallService
         {
             RecompConfig.PrepareVr(
                 fileSystem,
-                WheelWizard.Services.PathManager.RecompConfigFilePath,
+                paths.ConfigFilePath,
                 fileSystem.Path.Combine(environment.UserDataFolderPath, "Config.toml")
             );
         }
@@ -635,15 +665,12 @@ public sealed class RecompInstallService : IRecompInstallService
         return TryCatch(
             () =>
             {
-                using var sharedOperation = RecompOperationCoordinator.Acquire(
-                    WheelWizard.Services.PathManager.WheelWizardAppdataPath,
-                    fileSystem
-                );
+                using var sharedOperation = RecompOperationCoordinator.Acquire(applicationData.DirectoryPath, fileSystem);
                 if (
-                    !PathsMatch(environment.InstallFolderPath, Backend.Install(WheelWizard.Services.PathManager.WheelWizardAppdataPath))
+                    !PathsMatch(environment.InstallFolderPath, Backend.Install(applicationData.DirectoryPath))
                     || !PathsMatch(
                         environment.CacheFolderPath,
-                        Path.Combine(Backend.Root(WheelWizard.Services.PathManager.WheelWizardAppdataPath), "Cache")
+                        fileSystem.Path.Combine(Backend.Root(applicationData.DirectoryPath), "Cache")
                     )
                 )
                     throw new IOException("The uninstall target does not match the selected backend.");
@@ -722,7 +749,7 @@ public sealed class RecompInstallService : IRecompInstallService
             _game,
             modContent
         );
-        logger.LogInformation("Building WiiCompiled for Meta Quest: {Arguments}", arguments);
+        logger.LogInformation("Building WiiCompiled for Meta Quest: {Arguments}", string.Join(' ', arguments));
 
         var resultHolder = new EventHolder<RecompSetupResultEvent>();
         var packageHolder = new EventHolder<RecompQuestPackageEvent>();
@@ -829,26 +856,26 @@ public sealed class RecompInstallService : IRecompInstallService
             var cachedPath = fileSystem.Path.Combine(environment.CacheFolderPath, BuildCachedQuestAppFileName(app));
             if (IsCompleteQuestApp(cachedPath, app.SizeBytes))
             {
-                PruneCachedFilesExcept("*.apk", cachedPath);
+                hosts.PruneCachedFilesExcept(environment.CacheFolderPath, "*.apk", cachedPath);
                 return Ok(cachedPath);
             }
 
             var message = t("progress.recomp_downloading_quest_app");
             Report(progress, message, 0);
-            var downloadProgress = new DelegateProgress<int>(percent => Report(progress, message, percent));
+            var downloadProgress = new RecompSetupHostAcquirer.DelegateProgress<int>(percent => Report(progress, message, percent));
             var downloadResult = await downloader.DownloadAsync(app.DownloadUrl, cachedPath, downloadProgress, cancellationToken);
             if (downloadResult.IsFailure)
                 return downloadResult.Error;
 
             if (!IsCompleteQuestApp(cachedPath, app.SizeBytes))
             {
-                var removed = DeleteInvalidSetup(cachedPath);
+                var removed = hosts.DeleteInvalidSetup(cachedPath);
                 return removed
                     ? Fail($"The downloaded {app.FileName} is not a complete WiiCompiled Quest app.")
                     : Fail($"The downloaded {app.FileName} is not a complete WiiCompiled Quest app and could not be removed.");
             }
 
-            PruneCachedFilesExcept("*.apk", cachedPath);
+            hosts.PruneCachedFilesExcept(environment.CacheFolderPath, "*.apk", cachedPath);
             logger.LogInformation("Cached the WiiCompiled Quest app at {Path}", cachedPath);
             return Ok(cachedPath);
         }
@@ -884,7 +911,7 @@ public sealed class RecompInstallService : IRecompInstallService
     /// </summary>
     private bool IsCompleteQuestApp(string filePath, long? expectedSize)
     {
-        if (!IsUsableFile(filePath))
+        if (!hosts.IsUsableFile(filePath))
             return false;
         try
         {
@@ -906,7 +933,7 @@ public sealed class RecompInstallService : IRecompInstallService
         var supported = false;
         var info = await processRunner.RunAsync(
             environment.InstalledSetupFilePath,
-            "--info-json",
+            ["--info-json"],
             workingDirectory: null,
             line => supported |= RecompSetupIdentity.SupportsQuestBuild(line),
             cancellationToken
@@ -922,79 +949,6 @@ public sealed class RecompInstallService : IRecompInstallService
                 if ((current.Attributes & FileAttributes.ReparsePoint) != 0)
                     throw new IOException("Cannot uninstall through a junction or symbolic link.");
             fileSystem.Directory.Delete(folderPath, recursive: true);
-        }
-    }
-
-    private async Task<OperationResult<string>> EnsureSetupDownloadedAsync(
-        RecompRelease release,
-        IProgress<RecompInstallProgress>? progress,
-        CancellationToken cancellationToken
-    )
-    {
-        var cachedSetupPath = fileSystem.Path.Combine(environment.CacheFolderPath, BuildCachedSetupFileName(release.TagName));
-        if (IsUsableFile(cachedSetupPath) && await SetupMatchesVersionAsync(cachedSetupPath, release.TagName, cancellationToken))
-        {
-            PruneCachedFilesExcept("WiiCompiled-Setup-*.exe", cachedSetupPath);
-            return Ok(cachedSetupPath);
-        }
-
-        var downloadMessage = t("progress.recomp_downloading_setup");
-        Report(progress, downloadMessage, DownloadPercentFloor);
-
-        var downloadProgress = new DelegateProgress<int>(percent =>
-            Report(progress, downloadMessage, DownloadPercentFloor + (percent * (SetupPercentFloor - DownloadPercentFloor) / 100))
-        );
-
-        var downloadResult = await downloader.DownloadAsync(release.SetupDownloadUrl, cachedSetupPath, downloadProgress, cancellationToken);
-        if (downloadResult.IsFailure)
-            return downloadResult.Error;
-
-        if (!IsUsableFile(cachedSetupPath))
-            return Fail("The downloaded WiiCompiled setup is missing or empty.");
-
-        if (!await SetupMatchesVersionAsync(cachedSetupPath, release.TagName, cancellationToken))
-        {
-            var removed = DeleteInvalidSetup(cachedSetupPath);
-            return removed
-                ? Fail($"The downloaded WiiCompiled setup did not report release {release.TagName}.")
-                : Fail($"The downloaded WiiCompiled setup did not report release {release.TagName} and could not be removed.");
-        }
-
-        PruneCachedFilesExcept("WiiCompiled-Setup-*.exe", cachedSetupPath);
-        return Ok(cachedSetupPath);
-    }
-
-    /// <summary>
-    /// Drops the cached files matching <paramref name="pattern"/> that belong to other releases: setup
-    /// executables of around 380 MB, Quest apps of around 120 MB. The cache is only ever read for the
-    /// release currently installed, so keeping them meant every update permanently cost the user
-    /// another download's worth of disk. Failure here is deliberately silent: it is disk hygiene,
-    /// never a reason to fail an operation that has already succeeded.
-    /// </summary>
-    private void PruneCachedFilesExcept(string pattern, string keepFilePath)
-    {
-        try
-        {
-            if (!fileSystem.Directory.Exists(environment.CacheFolderPath))
-                return;
-            foreach (var candidate in fileSystem.Directory.EnumerateFiles(environment.CacheFolderPath, pattern))
-            {
-                if (string.Equals(candidate, keepFilePath, StringComparison.OrdinalIgnoreCase))
-                    continue;
-                try
-                {
-                    fileSystem.File.Delete(candidate);
-                    logger.LogInformation("Removed the superseded cached WiiCompiled file {Path}", candidate);
-                }
-                catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
-                {
-                    logger.LogDebug(exception, "Could not remove the cached WiiCompiled file {Path}", candidate);
-                }
-            }
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
-        {
-            logger.LogDebug(exception, "Could not enumerate the WiiCompiled cache for pruning.");
         }
     }
 
@@ -1015,61 +969,10 @@ public sealed class RecompInstallService : IRecompInstallService
         return await SetupMatchesVersionAsync(environment.InstalledSetupFilePath, state.SetupVersion, cancellationToken);
     }
 
-    private async Task<bool> SetupMatchesVersionAsync(string setupFilePath, string? expectedVersion, CancellationToken cancellationToken)
-    {
-        if (!RecompVersion.TryParse(expectedVersion, out var expected))
-            return false;
+    private Task<bool> SetupMatchesVersionAsync(string setupFilePath, string? expectedVersion, CancellationToken cancellationToken) =>
+        hosts.SetupMatchesVersionAsync(Backend, setupFilePath, expectedVersion, cancellationToken);
 
-        string? versionText = null;
-        var runResult = await processRunner.RunAsync(
-            setupFilePath,
-            RecompSetupCommandBuilder.BuildVersionArguments(),
-            workingDirectory: null,
-            line =>
-            {
-                if (RecompVersion.TryParse(line, out var version))
-                    versionText = version.ToString();
-            },
-            cancellationToken
-        );
-
-        var versionMatches =
-            runResult.IsSuccess
-            && runResult.Value == 0
-            && RecompVersion.TryParse(versionText, out var cachedVersion)
-            && cachedVersion.ComparePrecedenceTo(expected) == 0;
-        if (!versionMatches || Backend.Kind != RecompBackendKind.OpenXR)
-            return versionMatches;
-        var identityValid = false;
-        var info = await processRunner.RunAsync(
-            setupFilePath,
-            "--info-json",
-            workingDirectory: null,
-            line => identityValid |= RecompSetupIdentity.IsMatchingVr(line, expectedVersion!),
-            cancellationToken
-        );
-        return info.IsSuccess && info.Value == 0 && identityValid;
-    }
-
-    private bool VersionsMatch(string? first, string? second) =>
-        RecompVersion.TryParse(first, out var parsedFirst)
-        && RecompVersion.TryParse(second, out var parsedSecond)
-        && parsedFirst.ComparePrecedenceTo(parsedSecond) == 0;
-
-    private bool DeleteInvalidSetup(string setupFilePath)
-    {
-        try
-        {
-            if (fileSystem.File.Exists(setupFilePath))
-                fileSystem.File.Delete(setupFilePath);
-            return true;
-        }
-        catch (Exception exception)
-        {
-            logger.LogError(exception, "Could not remove invalid recomp setup at {Path}", setupFilePath);
-            return false;
-        }
-    }
+    private static bool VersionsMatch(string? first, string? second) => RecompSetupHostAcquirer.VersionsMatch(first, second);
 
     private async Task<OperationResult> RunSilentInstallAsync(
         string setupFilePath,
@@ -1088,7 +991,7 @@ public sealed class RecompInstallService : IRecompInstallService
         };
 
         var arguments = RecompSetupCommandBuilder.BuildSilentInstallArguments(request);
-        logger.LogInformation("Running the recomp setup: {Setup} {Arguments}", setupFilePath, arguments);
+        logger.LogInformation("Running the recomp setup: {Setup} {Arguments}", setupFilePath, string.Join(' ', arguments));
 
         Report(progress, t("progress.recomp_running_setup"), SetupPercentFloor);
 
@@ -1274,7 +1177,7 @@ public sealed class RecompInstallService : IRecompInstallService
                 return Fail("The installer did not publish a matching OpenXR VR installation identity.");
             RecompConfig.PrepareVr(
                 fileSystem,
-                WheelWizard.Services.PathManager.RecompConfigFilePath,
+                paths.ConfigFilePath,
                 fileSystem.Path.Combine(environment.UserDataFolderPath, "Config.toml")
             );
         }
@@ -1285,19 +1188,8 @@ public sealed class RecompInstallService : IRecompInstallService
         return Ok();
     }
 
-    private async Task<RecompRelease?> TryGetLatestReleaseAsync(CancellationToken cancellationToken)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-
-        var releasesResult = await gitHubService.GetReleasesAsync(Backend.RepositoryOwner, Backend.RepositoryName, count: 100);
-        if (releasesResult.IsFailure)
-        {
-            logger.LogWarning("Could not retrieve the recomp releases: {Message}", releasesResult.Error.Message);
-            return null;
-        }
-
-        return RecompReleaseResolver.FindLatest(releasesResult.Value);
-    }
+    private Task<RecompRelease?> TryGetLatestReleaseAsync(CancellationToken cancellationToken) =>
+        hosts.TryGetLatestReleaseAsync(Backend, cancellationToken);
 
     private RecompInstallState? ReadInstalledState()
     {
@@ -1346,8 +1238,8 @@ public sealed class RecompInstallService : IRecompInstallService
 
         try
         {
-            var normalizedFirst = Path.TrimEndingDirectorySeparator(fileSystem.Path.GetFullPath(first));
-            var normalizedSecond = Path.TrimEndingDirectorySeparator(fileSystem.Path.GetFullPath(second));
+            var normalizedFirst = fileSystem.Path.TrimEndingDirectorySeparator(fileSystem.Path.GetFullPath(first));
+            var normalizedSecond = fileSystem.Path.TrimEndingDirectorySeparator(fileSystem.Path.GetFullPath(second));
             return normalizedFirst.Equals(normalizedSecond, StringComparison.OrdinalIgnoreCase);
         }
         catch (Exception exception)
@@ -1363,27 +1255,8 @@ public sealed class RecompInstallService : IRecompInstallService
         return !string.IsNullOrWhiteSpace(gameFilePath) && fileSystem.File.Exists(gameFilePath);
     }
 
-    private bool IsUsableFile(string filePath)
-    {
-        try
-        {
-            return fileSystem.File.Exists(filePath) && fileSystem.FileInfo.New(filePath).Length > 0;
-        }
-        catch (Exception exception)
-        {
-            logger.LogWarning(exception, "Failed to inspect the cached recomp setup at {Path}", filePath);
-            return false;
-        }
-    }
-
-    private static string BuildCachedSetupFileName(string tagName)
-    {
-        var sanitized = new string(tagName.Select(character => char.IsLetterOrDigit(character) ? character : '-').ToArray());
-        return $"WiiCompiled-Setup-{sanitized}.exe";
-    }
-
     private static void Report(IProgress<RecompInstallProgress>? progress, string message, int percent) =>
-        progress?.Report(new(message, Math.Clamp(percent, 0, 100)));
+        RecompSetupHostAcquirer.Report(progress, message, percent);
 
     public void Dispose()
     {
@@ -1394,35 +1267,27 @@ public sealed class RecompInstallService : IRecompInstallService
         // and a SemaphoreSlim whose wait handle was never touched holds no OS resources anyway.
         GC.SuppressFinalize(this);
     }
+}
 
-    /// <summary>
-    /// Forwards progress synchronously, so the single <see cref="Progress{T}"/> the launcher owns stays the
-    /// only place where marshalling to the UI thread happens.
-    /// </summary>
-    private sealed class DelegateProgress<T>(Action<T> handler) : IProgress<T>
+/// <summary>
+/// NDJSON lines arrive on a process output thread, so publish the ones we keep with a memory barrier.
+/// Shared by both platform install services.
+/// </summary>
+internal sealed class EventHolder<T>
+    where T : class
+{
+    private T? _value;
+
+    public T? Value
     {
-        public void Report(T value) => handler(value);
-    }
-
-    /// <summary>
-    /// NDJSON lines arrive on a process output thread, so publish the ones we keep with a memory barrier.
-    /// </summary>
-    private sealed class EventHolder<T>
-        where T : class
-    {
-        private T? _value;
-
-        public T? Value
+        get => Volatile.Read(ref _value);
+        set
         {
-            get => Volatile.Read(ref _value);
-            set
-            {
-                Volatile.Write(ref _value, value);
-                Interlocked.Increment(ref _count);
-            }
+            Volatile.Write(ref _value, value);
+            Interlocked.Increment(ref _count);
         }
-
-        private int _count;
-        public int Count => Volatile.Read(ref _count);
     }
+
+    private int _count;
+    public int Count => Volatile.Read(ref _count);
 }

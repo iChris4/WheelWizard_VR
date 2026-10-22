@@ -6,15 +6,14 @@ using WheelWizard.GitHub;
 using WheelWizard.GitHub.Domain;
 using WheelWizard.Recomp;
 using WheelWizard.Recomp.Domain;
-using WheelWizard.Services;
-using WheelWizard.Test.Features.Settings;
 
 namespace WheelWizard.Test.Features.Recomp;
 
 [Collection("SettingsFeature")]
-public sealed class RecompBackendServiceTests : IDisposable
+public sealed class RecompBackendServiceTests
 {
-    private readonly MockFileSystem _fs = new();
+    private readonly RecompVrTestContext _context = new();
+    private MockFileSystem _fs => _context.FileSystem;
     private readonly IRecompProcessRunner _runner = Substitute.For<IRecompProcessRunner>();
     private readonly IGitHubSingletonService _github = Substitute.For<IGitHubSingletonService>();
     private readonly IRecompSetupDownloader _downloader = Substitute.For<IRecompSetupDownloader>();
@@ -42,13 +41,7 @@ public sealed class RecompBackendServiceTests : IDisposable
         return stream.ToArray();
     }
 
-    public RecompBackendServiceTests() => SettingsTestUtils.InitializeSettingsRuntime(Path.GetFullPath("VrServiceTests/Dolphin"));
-
-    public void Dispose()
-    {
-        SettingsTestUtils.ResetSettingsRuntime();
-        SettingsTestUtils.ResetSignalRuntime();
-    }
+    private string Root => _context.Root;
 
     private void Write(string path, string text)
     {
@@ -58,7 +51,7 @@ public sealed class RecompBackendServiceTests : IDisposable
 
     private RecompInstallService Create(RecompBackend backend)
     {
-        var root = PathManager.WheelWizardAppdataPath;
+        var root = Root;
         var install = backend.Install(root);
         var environment = Substitute.For<IRecompEnvironment>();
         environment.Backend.Returns(backend);
@@ -134,10 +127,16 @@ public sealed class RecompBackendServiceTests : IDisposable
                 return Task.FromResult(Ok());
             });
         _runner
-            .RunAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<Action<string>?>(), Arg.Any<CancellationToken>())
+            .RunAsync(
+                Arg.Any<string>(),
+                Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<string?>(),
+                Arg.Any<Action<string>?>(),
+                Arg.Any<CancellationToken>()
+            )
             .Returns(call =>
             {
-                var command = call.ArgAt<string>(1);
+                var command = string.Join(' ', call.ArgAt<IReadOnlyList<string>>(1));
                 _commands.Add(command);
                 var output = call.ArgAt<Action<string>?>(3);
                 if (command == "--version")
@@ -156,7 +155,7 @@ public sealed class RecompBackendServiceTests : IDisposable
                     );
                 else if (command.StartsWith("--build-quest"))
                 {
-                    var outputPath = Path.Combine(PathManager.WheelWizardAppdataPath, "MarioKartWii.wcgame");
+                    var outputPath = Path.Combine(root, "MarioKartWii.wcgame");
                     Write(outputPath, "synthetic package");
                     output?.Invoke(
                         """{"type":"progress","stage":"quest-build","message":"Compiling the game for Quest...","percent":60}"""
@@ -201,12 +200,16 @@ public sealed class RecompBackendServiceTests : IDisposable
                     );
                 return Task.FromResult(Ok(0));
             });
+        var hosts = new RecompSetupHostAcquirer(_runner, _downloader, _github, _fs, Substitute.For<ILogger<RecompSetupHostAcquirer>>());
         return new(
             environment,
             _runner,
-            _downloader,
+            hosts,
             Substitute.For<IRecompRetroWfcPayloadProbe>(),
+            _downloader,
             _github,
+            _context.Paths,
+            _context.ApplicationData,
             _fs,
             Substitute.For<ILogger<RecompInstallService>>()
         );
@@ -269,9 +272,9 @@ public sealed class RecompBackendServiceTests : IDisposable
     public async Task QuestBuildReportsThePackageTheVrHostWrote()
     {
         using var service = Create(RecompBackend.OpenXR);
-        var apk = Path.Combine(PathManager.WheelWizardAppdataPath, "quest.apk");
+        var apk = Path.Combine(Root, "quest.apk");
         Write(apk, "synthetic apk");
-        var output = Path.Combine(PathManager.WheelWizardAppdataPath, "MarioKartWii.wcgame");
+        var output = Path.Combine(Root, "MarioKartWii.wcgame");
         var reported = new List<int>();
         service.SelectGame(RecompGame.Base);
 
@@ -296,9 +299,9 @@ public sealed class RecompBackendServiceTests : IDisposable
     public async Task QuestBuildSendsTheSelectedGameAndItsPack()
     {
         using var service = Create(RecompBackend.OpenXR);
-        var apk = Path.Combine(PathManager.WheelWizardAppdataPath, "quest.apk");
+        var apk = Path.Combine(Root, "quest.apk");
         Write(apk, "synthetic apk");
-        var output = Path.Combine(PathManager.WheelWizardAppdataPath, "MarioKartWii.wcgame");
+        var output = Path.Combine(Root, "MarioKartWii.wcgame");
         service.SelectGame(RecompGame.RetroRewind);
 
         var result = await service.BuildForQuestAsync(apk, output, includeGameFiles: false, includeModContent: true);
@@ -310,7 +313,7 @@ public sealed class RecompBackendServiceTests : IDisposable
         Assert.Contains(Path.Combine("Content", "RetroRewind6"), command);
     }
 
-    private static string CacheFolder => Path.Combine(RecompBackend.OpenXR.Root(PathManager.WheelWizardAppdataPath), "Cache");
+    private string CacheFolder => Path.Combine(RecompBackend.OpenXR.Root(Root), "Cache");
 
     [Fact]
     public async Task QuestAppComesFromTheInstalledReleaseAndIsDownloadedOnce()
@@ -343,14 +346,11 @@ public sealed class RecompBackendServiceTests : IDisposable
             .DownloadAsync(found.Value.DownloadUrl, first.Value, Arg.Any<IProgress<int>?>(), Arg.Any<CancellationToken>());
 
         // The downloaded app is what the build compiles against.
-        var output = Path.Combine(PathManager.WheelWizardAppdataPath, "MarioKartWii.wcgame");
+        var output = Path.Combine(Root, "MarioKartWii.wcgame");
         service.SelectGame(RecompGame.Base);
         var build = await service.BuildForQuestAsync(first.Value, output, includeGameFiles: false);
         Assert.True(build.IsSuccess, build.IsFailure ? build.Error.Message : null);
-        Assert.Contains(
-            _commands,
-            command => command.StartsWith("--build-quest") && command.Contains("--quest-apk \"" + first.Value + "\"")
-        );
+        Assert.Contains(_commands, command => command.StartsWith("--build-quest") && command.Contains("--quest-apk " + first.Value));
     }
 
     [Fact]
@@ -427,11 +427,11 @@ public sealed class RecompBackendServiceTests : IDisposable
     public async Task QuestBuildRejectsAPackageForAnotherPath()
     {
         using var service = Create(RecompBackend.OpenXR);
-        var apk = Path.Combine(PathManager.WheelWizardAppdataPath, "quest.apk");
+        var apk = Path.Combine(Root, "quest.apk");
         Write(apk, "synthetic apk");
-        _questPackagePath = Path.Combine(PathManager.WheelWizardAppdataPath, "Other.wcgame");
+        _questPackagePath = Path.Combine(Root, "Other.wcgame");
 
-        var result = await service.BuildForQuestAsync(apk, Path.Combine(PathManager.WheelWizardAppdataPath, "MarioKartWii.wcgame"), false);
+        var result = await service.BuildForQuestAsync(apk, Path.Combine(Root, "MarioKartWii.wcgame"), false);
 
         Assert.True(result.IsFailure);
     }
@@ -443,10 +443,10 @@ public sealed class RecompBackendServiceTests : IDisposable
     {
         using var service = Create(vr ? RecompBackend.OpenXR : RecompBackend.Normal);
         _questBuildSupported = supported;
-        var apk = Path.Combine(PathManager.WheelWizardAppdataPath, "quest.apk");
+        var apk = Path.Combine(Root, "quest.apk");
         Write(apk, "synthetic apk");
 
-        var result = await service.BuildForQuestAsync(apk, Path.Combine(PathManager.WheelWizardAppdataPath, "MarioKartWii.wcgame"), false);
+        var result = await service.BuildForQuestAsync(apk, Path.Combine(Root, "MarioKartWii.wcgame"), false);
 
         Assert.True(result.IsFailure);
         Assert.DoesNotContain(_commands, command => command.StartsWith("--build-quest"));
@@ -465,14 +465,14 @@ public sealed class RecompBackendServiceTests : IDisposable
         var backend = vr ? RecompBackend.OpenXR : RecompBackend.Normal;
         var other = vr ? RecompBackend.Normal : RecompBackend.OpenXR;
         using var service = Create(backend);
-        var root = PathManager.WheelWizardAppdataPath;
+        var root = Root;
         var kept = new[]
         {
             backend.Config(root),
             other.Config(root),
             Path.Combine(other.Install(root), "Base", "WiiCompiled.exe"),
-            Path.Combine(PathManager.RecompPrivateNandFolderPath, "rksys.dat"),
-            Path.Combine(PathManager.RecompNandCopyFolderPath, "RFL_DB.dat"),
+            Path.Combine(_context.Paths.PrivateNandFolderPath, "rksys.dat"),
+            Path.Combine(_context.Paths.NandCopyFolderPath, "RFL_DB.dat"),
             Path.Combine(root, "Content", "RetroRewind6", "Ghosts", "saved.rkg"),
         };
         foreach (var path in kept)

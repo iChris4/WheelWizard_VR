@@ -1,7 +1,6 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Testably.Abstractions.Testing;
-using WheelWizard.Services;
 using WheelWizard.Settings;
 using WheelWizard.Settings.Types;
 
@@ -14,7 +13,7 @@ public class WhWzSettingTests
     public void Set_StoresValueAndCallsSaveAction_WhenValueIsValid()
     {
         var saveCalls = 0;
-        var setting = new WhWzSetting(typeof(int), "Volume", 10, _ => saveCalls++);
+        var setting = new WhWzSetting<int>("Volume", 10, _ => saveCalls++);
 
         var result = setting.Set(20);
 
@@ -26,7 +25,7 @@ public class WhWzSettingTests
     [Fact]
     public void Set_ReturnsFalseAndKeepsOldValue_WhenValidationFails()
     {
-        var setting = new WhWzSetting(typeof(int), "Volume", 10).SetValidation(value => (int)value! >= 0);
+        var setting = new WhWzSetting<int>("Volume", 10).SetValidation(value => value >= 0);
         setting.Set(5);
 
         var result = setting.Set(-1);
@@ -39,7 +38,7 @@ public class WhWzSettingTests
     public void Reset_AppliesDefaultValue_EvenIfDefaultDoesNotPassValidation()
     {
         var saveCalls = 0;
-        var setting = new WhWzSetting(typeof(int), "Threshold", 5, _ => saveCalls++).SetValidation(value => (int)value! >= 10);
+        var setting = new WhWzSetting<int>("Threshold", 5, _ => saveCalls++).SetValidation(value => value >= 10);
         setting.Set(12);
 
         setting.Reset();
@@ -49,10 +48,55 @@ public class WhWzSettingTests
     }
 
     [Fact]
+    public void Set_NotifiesLaterHandlers_WhenAChangedHandlerThrows()
+    {
+        var setting = new WhWzSetting<int>("Volume", 10);
+        Setting? received = null;
+        setting.Changed += _ => throw new InvalidOperationException("Subscriber failed");
+        setting.Changed += changed => received = changed;
+
+        Assert.True(setting.Set(20));
+
+        Assert.Same(setting, received);
+        Assert.Equal(20, setting.Get());
+    }
+
+    [Fact]
+    public void Reset_RestoresValidation_WhenAChangedHandlerThrows()
+    {
+        var setting = new WhWzSetting<int>("Threshold", 5).SetValidation(value => value >= 10);
+        setting.Set(12);
+        setting.Changed += _ => throw new InvalidOperationException("Subscriber failed");
+
+        setting.Reset();
+
+        Assert.Equal(5, setting.Get());
+        Assert.False(setting.Set(6));
+        Assert.Equal(5, setting.Get());
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Reset_RestoresForceSave_WhenSavingThrows(bool forceSave)
+    {
+        var setting = new WhWzSetting<int>("Threshold", 5, _ => throw new IOException("Save failed"))
+            .SetValidation(value => value >= 10)
+            .SetForceSave(forceSave);
+        setting.Set(12, skipSave: true);
+
+        setting.Reset();
+        Assert.IsType<IOException>(setting.SaveError);
+
+        Assert.Equal(forceSave, setting.Set(6, skipSave: true));
+        Assert.Equal(forceSave ? 6 : 12, setting.Get());
+    }
+
+    [Fact]
     public void SetFromJson_ParsesEnumAndArrayValues()
     {
-        var enumSetting = new WhWzSetting(typeof(DayOfWeek), "Day", DayOfWeek.Monday);
-        var arraySetting = new WhWzSetting(typeof(string[]), "Names", Array.Empty<string>());
+        var enumSetting = new WhWzSetting<DayOfWeek>("Day", DayOfWeek.Monday);
+        var arraySetting = new WhWzSetting<string[]>("Names", Array.Empty<string>());
         using var enumDocument = JsonDocument.Parse("2");
         using var arrayDocument = JsonDocument.Parse("[\"A\", \"B\"]");
 
@@ -66,12 +110,13 @@ public class WhWzSettingTests
     }
 
     [Fact]
-    public void SetFromJson_Throws_WhenTypeIsUnsupported()
+    public void SetFromJson_ReadsTypedDecimalValues()
     {
-        var setting = new WhWzSetting(typeof(decimal), "Price", 1m);
+        var setting = new WhWzSetting<decimal>("Price", 1m);
         using var document = JsonDocument.Parse("2");
 
-        Assert.Throws<InvalidOperationException>(() => setting.SetFromJson(document.RootElement, skipSave: true));
+        Assert.True(setting.SetFromJson(document.RootElement, skipSave: true));
+        Assert.Equal(2m, setting.Value);
     }
 }
 
@@ -84,16 +129,16 @@ public class WhWzSettingManagerTests
         var fileSystem = new MockFileSystem();
         var logger = Substitute.For<ILogger<WhWzSettingManager>>();
         var manager = new WhWzSettingManager(logger, fileSystem);
-        var volume = new WhWzSetting(typeof(int), "Volume", 5).SetValidation(value => (int)value! >= 0);
-        var language = new WhWzSetting(typeof(string), "Language", "en");
-        var configPath = PathManager.WheelWizardConfigFilePath;
+        var volume = new WhWzSetting<int>("Volume", 5).SetValidation(value => value >= 0);
+        var language = new WhWzSetting<string>("Language", "en");
+        var configPath = fileSystem.Path.GetFullPath("/settings/config.json");
         var configFolderPath = fileSystem.Path.GetDirectoryName(configPath)!;
         fileSystem.Directory.CreateDirectory(configFolderPath);
         fileSystem.File.WriteAllText(configPath, "{\"Volume\":12,\"Language\":\"de\",\"Unknown\":true}");
 
         manager.RegisterSetting(volume);
         manager.RegisterSetting(language);
-        manager.LoadSettings();
+        manager.LoadSettings(configPath);
 
         Assert.Equal(12, Assert.IsType<int>(volume.Get()));
         Assert.Equal("de", Assert.IsType<string>(language.Get()));
@@ -105,14 +150,14 @@ public class WhWzSettingManagerTests
         var fileSystem = new MockFileSystem();
         var logger = Substitute.For<ILogger<WhWzSettingManager>>();
         var manager = new WhWzSettingManager(logger, fileSystem);
-        var volume = new WhWzSetting(typeof(int), "Volume", 5).SetValidation(value => (int)value! >= 0);
-        var configPath = PathManager.WheelWizardConfigFilePath;
+        var volume = new WhWzSetting<int>("Volume", 5).SetValidation(value => value >= 0);
+        var configPath = fileSystem.Path.GetFullPath("/settings/config.json");
         var configFolderPath = fileSystem.Path.GetDirectoryName(configPath)!;
         fileSystem.Directory.CreateDirectory(configFolderPath);
         fileSystem.File.WriteAllText(configPath, "{\"Volume\":-1}");
 
         manager.RegisterSetting(volume);
-        manager.LoadSettings();
+        manager.LoadSettings(configPath);
 
         Assert.Equal(5, Assert.IsType<int>(volume.Get()));
     }
@@ -123,13 +168,13 @@ public class WhWzSettingManagerTests
         var fileSystem = new MockFileSystem();
         var logger = Substitute.For<ILogger<WhWzSettingManager>>();
         var manager = new WhWzSettingManager(logger, fileSystem);
-        var volume = new WhWzSetting(typeof(int), "Volume", 5);
-        var configPath = PathManager.WheelWizardConfigFilePath;
+        var volume = new WhWzSetting<int>("Volume", 5);
+        var configPath = fileSystem.Path.GetFullPath("/settings/config.json");
 
         manager.RegisterSetting(volume);
-        manager.LoadSettings();
+        manager.LoadSettings(configPath);
         volume.Set(9, skipSave: true);
-        manager.SaveSettings(volume);
+        manager.SaveSettings(configPath, volume);
 
         var savedJson = fileSystem.File.ReadAllText(configPath);
         Assert.Contains("\"Volume\": 9", savedJson);
@@ -141,16 +186,16 @@ public class WhWzSettingManagerTests
         var fileSystem = new MockFileSystem();
         var logger = Substitute.For<ILogger<WhWzSettingManager>>();
         var manager = new WhWzSettingManager(logger, fileSystem);
-        var registeredBeforeLoad = new WhWzSetting(typeof(int), "Volume", 1);
-        var ignoredAfterLoad = new WhWzSetting(typeof(string), "Future", "initial");
-        var configPath = PathManager.WheelWizardConfigFilePath;
+        var registeredBeforeLoad = new WhWzSetting<int>("Volume", 1);
+        var ignoredAfterLoad = new WhWzSetting<string>("Future", "initial");
+        var configPath = fileSystem.Path.GetFullPath("/settings/config.json");
 
         manager.RegisterSetting(registeredBeforeLoad);
-        manager.LoadSettings();
+        manager.LoadSettings(configPath);
         manager.RegisterSetting(ignoredAfterLoad);
         registeredBeforeLoad.Set(2, skipSave: true);
         ignoredAfterLoad.Set("changed", skipSave: true);
-        manager.SaveSettings(registeredBeforeLoad);
+        manager.SaveSettings(configPath, registeredBeforeLoad);
 
         var savedJson = fileSystem.File.ReadAllText(configPath);
         Assert.Contains("\"Volume\": 2", savedJson);

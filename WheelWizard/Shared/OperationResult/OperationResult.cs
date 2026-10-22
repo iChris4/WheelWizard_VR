@@ -1,4 +1,4 @@
-﻿using System.Diagnostics.CodeAnalysis;
+using System.Diagnostics.CodeAnalysis;
 using Serilog;
 using WheelWizard.Shared.MessageTranslations;
 
@@ -83,8 +83,8 @@ public class OperationResult
                 Message = errorMessage ?? ex.Message,
                 Exception = ex,
                 MessageTranslation = translation,
-                TitleReplacements = [ex.Message],
-                ExtraReplacements = [ex.Message],
+                TitleReplacements = new { error = ex.Message },
+                ExtraReplacements = new { error = ex.Message },
             };
         }
     }
@@ -104,6 +104,7 @@ public class OperationResult
         MessageTranslation? translation = null
     )
     {
+        // #todo: agree on one cancellation contract for both async wrappers so cancellation isn't treated as a normal failure.
         try
         {
             var value = await func();
@@ -117,8 +118,8 @@ public class OperationResult
                 Message = errorMessage ?? ex.Message,
                 Exception = ex,
                 MessageTranslation = translation,
-                TitleReplacements = [ex.Message],
-                ExtraReplacements = [ex.Message],
+                TitleReplacements = new { error = ex.Message },
+                ExtraReplacements = new { error = ex.Message },
             };
         }
     }
@@ -146,8 +147,8 @@ public class OperationResult
                 Message = errorMessage ?? ex.Message,
                 Exception = ex,
                 MessageTranslation = translation,
-                TitleReplacements = [ex.Message],
-                ExtraReplacements = [ex.Message],
+                TitleReplacements = new { error = ex.Message },
+                ExtraReplacements = new { error = ex.Message },
             };
         }
     }
@@ -179,8 +180,8 @@ public class OperationResult
                 Message = errorMessage ?? ex.Message,
                 Exception = ex,
                 MessageTranslation = translation,
-                TitleReplacements = [ex.Message],
-                ExtraReplacements = [ex.Message],
+                TitleReplacements = new { error = ex.Message },
+                ExtraReplacements = new { error = ex.Message },
             };
         }
     }

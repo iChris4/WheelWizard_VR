@@ -1,42 +1,38 @@
 using Microsoft.Extensions.Logging;
-using Testably.Abstractions.Testing;
+using WheelWizard.AutoUpdating;
+using WheelWizard.CustomDistributions;
+using WheelWizard.Dolphin.Discovery;
+using WheelWizard.Dolphin.Paths;
 using WheelWizard.Recomp;
-using WheelWizard.Recomp.Domain;
-using WheelWizard.Services;
 using WheelWizard.Settings;
 using WheelWizard.Settings.Types;
-using WheelWizard.Test.Features.Settings;
+using WheelWizard.Shared.Downloads;
+using WheelWizard.Shared.Processes;
+using WheelWizard.WiiManagement.MiiManagement;
 
 namespace WheelWizard.Test.Features.Recomp;
 
 [Collection("SettingsFeature")]
-public sealed class RecompVrTests : IDisposable
+public sealed class RecompVrTests
 {
-    private readonly MockFileSystem _fs = new();
+    private readonly RecompVrTestContext _context = new();
 
-    public RecompVrTests() => SettingsTestUtils.InitializeSettingsRuntime(Path.GetFullPath("VrTests/Dolphin"));
+    private Testably.Abstractions.Testing.MockFileSystem Fs => _context.FileSystem;
 
-    public void Dispose()
-    {
-        SettingsTestUtils.ResetSettingsRuntime();
-        SettingsTestUtils.ResetSignalRuntime();
-    }
-
-    private void Write(string path, string text)
-    {
-        _fs.Directory.CreateDirectory(_fs.Path.GetDirectoryName(path)!);
-        _fs.File.WriteAllText(path, text);
-    }
+    private void Write(string path, string text) => _context.Write(path, text);
 
     [Fact]
     public void MiiMutationIsRejectedDuringGameLease()
     {
-        var repository = new WheelWizard.WiiManagement.MiiManagement.MiiRepositoryServiceService(
-            _fs,
+        var repository = new MiiRepositoryServiceService(
+            Fs,
             Substitute.For<ISettingsManager>(),
+            _context.Paths,
+            Substitute.For<IDolphinPaths>(),
+            _context.ApplicationData,
             Substitute.For<IRecompDolphinDataService>()
         );
-        using var lease = RecompOperationCoordinator.Acquire(PathManager.WheelWizardAppdataPath, _fs);
+        using var lease = RecompOperationCoordinator.Acquire(_context.Root, Fs);
         Assert.True(repository.ForceCreateDatabase().IsFailure);
         Assert.True(repository.SaveAllBlocks([]).IsFailure);
     }
@@ -44,7 +40,13 @@ public sealed class RecompVrTests : IDisposable
     [Fact]
     public void SelfUpdaterSelectsOnlyTheVrLauncherAsset()
     {
-        var updater = new WheelWizard.AutoUpdating.Platforms.WindowsUpdatePlatform(_fs);
+        var updater = new WheelWizard.AutoUpdating.Platforms.WindowsUpdatePlatform(
+            Fs,
+            Substitute.For<IDownloadService>(),
+            Substitute.For<IApplicationProcess>(),
+            Substitute.For<IProcessLauncher>(),
+            Substitute.For<IUpdatePresentation>()
+        );
         var release = new WheelWizard.GitHub.Domain.GithubRelease
         {
             TagName = "v2.5.5",
@@ -62,30 +64,27 @@ public sealed class RecompVrTests : IDisposable
     [InlineData(true, true, RecompBackendKind.OpenXR)]
     public void BackendMigration(bool normal, bool vr, RecompBackendKind expected)
     {
-        var selection = new RecompBackendSelection();
-        selection.Restore(normal, vr);
-        Assert.Equal(OperatingSystem.IsWindows() ? expected : RecompBackendKind.Dolphin, selection.Kind);
+        _context.Selection.Restore(normal, vr);
+        // The VR backend is Windows-only; elsewhere the normal one runs where the recomp is supported.
+        var expectedHere =
+            OperatingSystem.IsWindows() ? expected
+            : normal && RecompPlatform.IsSupported ? RecompBackendKind.Normal
+            : RecompBackendKind.Dolphin;
+        Assert.Equal(expectedHere, _context.Selection.Kind);
     }
 
     [Fact]
     public void SwitchesAreExclusiveAndBusyChangesAreRejected()
     {
-        var selection = new RecompBackendSelection();
-        var settings = new SettingsManager(
-            Substitute.For<IWhWzSettingManager>(),
-            Substitute.For<IDolphinSettingManager>(),
-            Substitute.For<IRecompSettingManager>(),
-            _fs,
-            selection
-        );
+        var settings = _context.CreateSettings();
         Assert.True(settings.Set(settings.ENABLE_RECOMP, true));
         Assert.True(settings.Set(settings.ENABLE_RECOMP_VR, true));
-        Assert.False(settings.Get<bool>(settings.ENABLE_RECOMP));
-        Assert.True(settings.Get<bool>(settings.ENABLE_RECOMP_VR));
-        using (RecompOperationCoordinator.Acquire(PathManager.WheelWizardAppdataPath, _fs))
+        Assert.False(settings.Get(settings.ENABLE_RECOMP));
+        Assert.True(settings.Get(settings.ENABLE_RECOMP_VR));
+        using (RecompOperationCoordinator.Acquire(_context.Root, Fs))
             Assert.False(settings.Set(settings.ENABLE_RECOMP, true));
         Assert.True(settings.Set(settings.ENABLE_RECOMP, true));
-        Assert.False(settings.Get<bool>(settings.ENABLE_RECOMP_VR));
+        Assert.False(settings.Get(settings.ENABLE_RECOMP_VR));
         Assert.True(settings.Set(settings.ENABLE_RECOMP, false));
         Assert.False(settings.IsRecompModeActive());
     }
@@ -95,15 +94,19 @@ public sealed class RecompVrTests : IDisposable
     {
         if (!OperatingSystem.IsWindows())
             return;
-        var settings = SettingsTestUtils.InitializeSettingsRuntime(Path.GetFullPath("VrTests/Dolphin"));
-        var load = new WhWzSetting(typeof(string), "LoadPath", Path.GetFullPath("VrTests/Dolphin/Load"));
-        settings.LOAD_PATH.Returns(load);
-        settings.Get<string>(load).Returns((string)load.Get());
-        var selection = new RecompBackendSelection();
-        selection.Restore(true, false);
-        var normal = new RecompEnvironment(_fs, selection);
-        selection.Restore(false, true);
-        var vr = new RecompEnvironment(_fs, selection);
+        RecompEnvironment Create() =>
+            new(
+                Fs,
+                _context.Paths,
+                _context.ApplicationData,
+                _context.Selection,
+                Substitute.For<ISettingsManager>(),
+                Substitute.For<ICustomDistributionPaths>()
+            );
+        _context.Selection.Restore(true, false);
+        var normal = Create();
+        _context.Selection.Restore(false, true);
+        var vr = Create();
         Assert.Equal("patchzyy", normal.Backend.RepositoryOwner);
         Assert.Equal("iChris4", vr.Backend.RepositoryOwner);
         Assert.NotEqual(normal.InstallFolderPath, vr.InstallFolderPath);
@@ -111,6 +114,8 @@ public sealed class RecompVrTests : IDisposable
         Assert.NotEqual(normal.UserDataFolderPath, vr.UserDataFolderPath);
         Assert.EndsWith(Path.Combine("Recomp", "Install"), normal.InstallFolderPath);
         Assert.EndsWith(Path.Combine("RecompVR", "Install"), vr.InstallFolderPath);
+        // Both backends share the normal installation's NAND copy.
+        Assert.Equal(normal.NandCopyFolderPath, vr.NandCopyFolderPath);
     }
 
     [Theory]
@@ -145,7 +150,7 @@ public sealed class RecompVrTests : IDisposable
     {
         foreach (var backend in new[] { RecompBackend.Normal, RecompBackend.OpenXR })
         {
-            Assert.Equal(argument, RecompSetupCommandBuilder.BuildLaunchArguments(game == RecompGame.RetroRewind));
+            Assert.Equal([argument], RecompSetupCommandBuilder.BuildLaunchArguments(game == RecompGame.RetroRewind));
             Assert.False(string.IsNullOrEmpty(backend.RepositoryName));
         }
     }
@@ -153,21 +158,21 @@ public sealed class RecompVrTests : IDisposable
     [Fact]
     public void VrConfigPreservesNormalAndImportsOnlyControllerOnce()
     {
-        var normal = PathManager.RecompConfigFilePath;
-        var vr = RecompBackend.OpenXR.Config(PathManager.WheelWizardAppdataPath);
+        var normal = _context.Paths.ConfigFilePath;
+        var vr = RecompBackend.OpenXR.Config(_context.Root);
         const string original =
             "[video]\ngraphics_api = \"vulkan\"\n[controller]\na = \"south\"\n[paths]\ndvd_root = 'private game path'\n";
         Write(normal, original);
         Write(vr, "[paths]\ndvd_root = 'VR game path'\n[vr]\nworld_units_per_meter = 30.0\n");
-        RecompConfig.PrepareVr(_fs, normal, vr);
-        Assert.Equal(original, _fs.File.ReadAllText(normal));
-        Assert.Equal("d3d12", RecompConfig.ReadString(_fs, vr, "video", "graphics_api"));
-        Assert.Equal("VR game path", RecompConfig.ReadString(_fs, vr, "paths", "dvd_root"));
-        Assert.Contains("world_units_per_meter = 30.0", _fs.File.ReadAllText(vr));
-        Assert.Equal("south", RecompConfig.ReadString(_fs, vr, "controller", "a"));
-        RecompConfig.Set(_fs, vr, "controller", "a", "\"east\"");
-        RecompConfig.PrepareVr(_fs, normal, vr);
-        Assert.Equal("east", RecompConfig.ReadString(_fs, vr, "controller", "a"));
+        RecompConfig.PrepareVr(Fs, normal, vr);
+        Assert.Equal(original, Fs.File.ReadAllText(normal));
+        Assert.Equal("d3d12", RecompConfig.ReadString(Fs, vr, "video", "graphics_api"));
+        Assert.Equal("VR game path", RecompConfig.ReadString(Fs, vr, "paths", "dvd_root"));
+        Assert.Contains("world_units_per_meter = 30.0", Fs.File.ReadAllText(vr));
+        Assert.Equal("south", RecompConfig.ReadString(Fs, vr, "controller", "a"));
+        RecompConfig.Set(Fs, vr, "controller", "a", "\"east\"");
+        RecompConfig.PrepareVr(Fs, normal, vr);
+        Assert.Equal("east", RecompConfig.ReadString(Fs, vr, "controller", "a"));
     }
 
     [Theory]
@@ -176,15 +181,15 @@ public sealed class RecompVrTests : IDisposable
     [InlineData("enabled = false # desktop preference", false)]
     public void VrPreparationRetainsOpenXrPreference(string entry, bool enabled)
     {
-        var vr = RecompBackend.OpenXR.Config(PathManager.WheelWizardAppdataPath);
+        var vr = RecompBackend.OpenXR.Config(_context.Root);
         Write(vr, "[vr]\n" + entry + "\nmirror_view = \"left\"\nfirst_person = true\n");
-        RecompConfig.PrepareVr(_fs, PathManager.RecompConfigFilePath, vr);
-        RecompConfig.PrepareVr(_fs, PathManager.RecompConfigFilePath, vr);
-        var content = _fs.File.ReadAllText(vr);
+        RecompConfig.PrepareVr(Fs, _context.Paths.ConfigFilePath, vr);
+        RecompConfig.PrepareVr(Fs, _context.Paths.ConfigFilePath, vr);
+        var content = Fs.File.ReadAllText(vr);
         Assert.Contains("enabled = " + enabled.ToString().ToLowerInvariant(), content);
         Assert.Contains("required = false", content);
         Assert.Contains("first_person = true", content);
-        Assert.Equal("left", RecompConfig.ReadString(_fs, vr, "vr", "mirror_view"));
+        Assert.Equal("left", RecompConfig.ReadString(Fs, vr, "vr", "mirror_view"));
     }
 
     [Fact]
@@ -193,37 +198,33 @@ public sealed class RecompVrTests : IDisposable
         // OpenXR drives the headset on either offered API, so a Vulkan choice survives a VR launch.
         // Only a value the runtime would refuse is repaired, and with OpenXR off the installation is
         // an ordinary desktop one where the player's own API always stands.
-        var vr = RecompBackend.OpenXR.Config(PathManager.WheelWizardAppdataPath);
+        var vr = RecompBackend.OpenXR.Config(_context.Root);
         Write(vr, "[vr]\nenabled = true\n[video]\ngraphics_api = \"vulkan\"\n");
-        RecompConfig.PrepareVr(_fs, PathManager.RecompConfigFilePath, vr);
-        Assert.Equal("vulkan", RecompConfig.ReadString(_fs, vr, "video", "graphics_api"));
+        RecompConfig.PrepareVr(Fs, _context.Paths.ConfigFilePath, vr);
+        Assert.Equal("vulkan", RecompConfig.ReadString(Fs, vr, "video", "graphics_api"));
 
-        RecompConfig.Set(_fs, vr, "video", "graphics_api", "\"auto\"");
-        RecompConfig.PrepareVr(_fs, PathManager.RecompConfigFilePath, vr);
-        Assert.Equal("d3d12", RecompConfig.ReadString(_fs, vr, "video", "graphics_api"));
+        RecompConfig.Set(Fs, vr, "video", "graphics_api", "\"auto\"");
+        RecompConfig.PrepareVr(Fs, _context.Paths.ConfigFilePath, vr);
+        Assert.Equal("d3d12", RecompConfig.ReadString(Fs, vr, "video", "graphics_api"));
 
-        RecompConfig.Set(_fs, vr, "vr", "enabled", "false");
-        RecompConfig.Set(_fs, vr, "video", "graphics_api", "\"opengl\"");
-        RecompConfig.PrepareVr(_fs, PathManager.RecompConfigFilePath, vr);
-        Assert.Equal("opengl", RecompConfig.ReadString(_fs, vr, "video", "graphics_api"));
+        RecompConfig.Set(Fs, vr, "vr", "enabled", "false");
+        RecompConfig.Set(Fs, vr, "video", "graphics_api", "\"opengl\"");
+        RecompConfig.PrepareVr(Fs, _context.Paths.ConfigFilePath, vr);
+        Assert.Equal("opengl", RecompConfig.ReadString(Fs, vr, "video", "graphics_api"));
     }
 
     [Fact]
     public void VrPreferencesPersistOnlyToSelectedBackendAndReloadAfterSwitch()
     {
-        var selection = new RecompBackendSelection();
+        if (!OperatingSystem.IsWindows())
+            return;
+        var selection = _context.Selection;
         selection.Restore(false, true);
         var vr = selection.ConfigPath;
         Write(vr, "[vr]\nenabled = true\n[video]\ngraphics_api = \"d3d12\"\n");
-        var manager = new RecompSettingManager(_fs, selection);
-        var settings = new SettingsManager(
-            Substitute.For<IWhWzSettingManager>(),
-            Substitute.For<IDolphinSettingManager>(),
-            manager,
-            _fs,
-            selection
-        );
-        manager.LoadSettings();
+        var manager = new RecompSettingManager(Fs);
+        var settings = _context.CreateSettings(manager);
+        manager.LoadSettings(selection.ConfigPath);
         settings.Set(settings.RECOMP_VR_ENABLED, false);
         settings.Set(settings.RECOMP_VR_MIRROR_VIEW, "both");
         settings.Set(settings.RECOMP_VR_FIRST_PERSON, true);
@@ -231,60 +232,58 @@ public sealed class RecompVrTests : IDisposable
         settings.Set(settings.RECOMP_VR_HIDE_DRIVER, false);
         settings.Set(settings.RECOMP_VR_HAND_STEERING, false);
         settings.Set(settings.RECOMP_VR_RENDER_SCALE, 1.25);
-        var saved = _fs.File.ReadAllText(vr);
+        var saved = Fs.File.ReadAllText(vr);
         selection.Restore(true, false);
         Write(selection.ConfigPath, "[video]\ngraphics_api = \"vulkan\"\n");
-        manager.ReloadSettings();
-        Assert.Equal("normal", settings.Get<string>(settings.RECOMP_VR_MIRROR_VIEW));
-        Assert.False(settings.Get<bool>(settings.RECOMP_VR_FIRST_PERSON));
-        Assert.Equal("yaw_pitch", settings.Get<string>(settings.RECOMP_VR_FIRST_PERSON_ROTATION));
-        Assert.True(settings.Get<bool>(settings.RECOMP_VR_HAND_STEERING));
-        Assert.Equal(1.0, settings.Get<double>(settings.RECOMP_VR_RENDER_SCALE));
-        Assert.Equal("[video]\ngraphics_api = \"vulkan\"\n", _fs.File.ReadAllText(selection.ConfigPath));
+        manager.ReloadSettings(selection.ConfigPath);
+        Assert.Equal("normal", settings.Get(settings.RECOMP_VR_MIRROR_VIEW));
+        Assert.False(settings.Get(settings.RECOMP_VR_FIRST_PERSON));
+        Assert.Equal("yaw_pitch", settings.Get(settings.RECOMP_VR_FIRST_PERSON_ROTATION));
+        Assert.True(settings.Get(settings.RECOMP_VR_HAND_STEERING));
+        Assert.Equal(1.0, settings.Get(settings.RECOMP_VR_RENDER_SCALE));
+        Assert.Equal("[video]\ngraphics_api = \"vulkan\"\n", Fs.File.ReadAllText(selection.ConfigPath));
         selection.Restore(false, true);
-        manager.ReloadSettings();
-        Assert.False(settings.Get<bool>(settings.RECOMP_VR_ENABLED));
-        Assert.Equal("both", settings.Get<string>(settings.RECOMP_VR_MIRROR_VIEW));
-        Assert.True(settings.Get<bool>(settings.RECOMP_VR_FIRST_PERSON));
-        Assert.Equal("full", settings.Get<string>(settings.RECOMP_VR_FIRST_PERSON_ROTATION));
-        Assert.False(settings.Get<bool>(settings.RECOMP_VR_HIDE_DRIVER));
-        Assert.False(settings.Get<bool>(settings.RECOMP_VR_HAND_STEERING));
-        Assert.Equal(1.25, settings.Get<double>(settings.RECOMP_VR_RENDER_SCALE));
-        Assert.Equal(saved, _fs.File.ReadAllText(vr));
+        manager.ReloadSettings(selection.ConfigPath);
+        Assert.False(settings.Get(settings.RECOMP_VR_ENABLED));
+        Assert.Equal("both", settings.Get(settings.RECOMP_VR_MIRROR_VIEW));
+        Assert.True(settings.Get(settings.RECOMP_VR_FIRST_PERSON));
+        Assert.Equal("full", settings.Get(settings.RECOMP_VR_FIRST_PERSON_ROTATION));
+        Assert.False(settings.Get(settings.RECOMP_VR_HIDE_DRIVER));
+        Assert.False(settings.Get(settings.RECOMP_VR_HAND_STEERING));
+        Assert.Equal(1.25, settings.Get(settings.RECOMP_VR_RENDER_SCALE));
+        Assert.Equal(saved, Fs.File.ReadAllText(vr));
         Assert.Contains("hand_steering = false", saved);
     }
 
     [Fact]
     public void HandSteeringFollowsTheConfigurationAndDefaultsOnWithoutIt()
     {
-        var selection = new RecompBackendSelection();
+        if (!OperatingSystem.IsWindows())
+            return;
+        var selection = _context.Selection;
         selection.Restore(false, true);
         var vr = selection.ConfigPath;
         Write(vr, "[vr]\nenabled = true\n");
-        var manager = new RecompSettingManager(_fs, selection);
-        var settings = new SettingsManager(
-            Substitute.For<IWhWzSettingManager>(),
-            Substitute.For<IDolphinSettingManager>(),
-            manager,
-            _fs,
-            selection
-        );
-        manager.LoadSettings();
+        var manager = new RecompSettingManager(Fs);
+        var settings = _context.CreateSettings(manager);
+        manager.LoadSettings(selection.ConfigPath);
         // The runtime's own default (kVrHandSteeringDefault) is on, and loading writes nothing back.
-        Assert.True(settings.Get<bool>(settings.RECOMP_VR_HAND_STEERING));
-        Assert.Equal("[vr]\nenabled = true\n", _fs.File.ReadAllText(vr));
+        Assert.True(settings.Get(settings.RECOMP_VR_HAND_STEERING));
+        Assert.Equal("[vr]\nenabled = true\n", Fs.File.ReadAllText(vr));
         Write(vr, "[vr]\nenabled = true\nhand_steering = false\n");
-        manager.ReloadSettings();
-        Assert.False(settings.Get<bool>(settings.RECOMP_VR_HAND_STEERING));
+        manager.ReloadSettings(selection.ConfigPath);
+        Assert.False(settings.Get(settings.RECOMP_VR_HAND_STEERING));
         settings.Set(settings.RECOMP_VR_HAND_STEERING, true);
         // Written with the platform's line endings.
-        Assert.Equal("[vr]\nenabled = true\nhand_steering = true\n", _fs.File.ReadAllText(vr).ReplaceLineEndings("\n"));
+        Assert.Equal("[vr]\nenabled = true\nhand_steering = true\n", Fs.File.ReadAllText(vr).ReplaceLineEndings("\n"));
     }
 
     [Fact]
     public void CameraSettingsReadAsTheRuntimeDoes()
     {
-        var selection = new RecompBackendSelection();
+        if (!OperatingSystem.IsWindows())
+            return;
+        var selection = _context.Selection;
         selection.Restore(false, true);
         var vr = selection.ConfigPath;
         // runtime_config.h discards a value outside its range or names, and an integer key written
@@ -295,65 +294,57 @@ public sealed class RecompVrTests : IDisposable
                 + "first_person_hidden_model = -1.0\nfirst_person_seat = \"custom\"\nwheel_kart_degrees = 120\n"
                 + "cockpit_item_hand = \"off\"\ncockpit_item_size = 0.3\n"
         );
-        var manager = new RecompSettingManager(_fs, selection);
-        var settings = new SettingsManager(
-            Substitute.For<IWhWzSettingManager>(),
-            Substitute.For<IDolphinSettingManager>(),
-            manager,
-            _fs,
-            selection
-        );
-        manager.LoadSettings();
-        Assert.True(settings.Get<bool>(settings.RECOMP_VR_FLAT_SCREEN));
-        Assert.False(settings.Get<bool>(settings.RECOMP_VR_IMMERSIVE_WINDOW));
-        Assert.True(settings.Get<bool>(settings.RECOMP_VR_FLAT_RACE_INTRO));
-        Assert.Equal(0.0, settings.Get<double>(settings.RECOMP_VR_LEAN_BACK_DEGREES));
-        Assert.Equal("inside", settings.Get<string>(settings.RECOMP_VR_BULLET_BILL_CAMERA));
-        Assert.Equal(0, settings.Get<int>(settings.RECOMP_VR_FIRST_PERSON_HIDDEN_MODEL));
-        Assert.Equal("custom", settings.Get<string>(settings.RECOMP_VR_FIRST_PERSON_SEAT));
-        Assert.True(settings.Get<bool>(settings.RECOMP_VR_BODY_IK));
-        Assert.False(settings.Get<bool>(settings.RECOMP_VR_BODY_IK_HANDS_ONLY));
-        Assert.Equal(90.0, settings.Get<double>(settings.RECOMP_VR_BODY_IK_LEFT_HAND_ROLL));
-        Assert.Equal(-90.0, settings.Get<double>(settings.RECOMP_VR_BODY_IK_RIGHT_HAND_ROLL));
-        Assert.False(settings.Get<bool>(settings.RECOMP_VR_PLACEHOLDER_STEERING_WHEEL));
-        Assert.Equal(120.0, settings.Get<double>(settings.RECOMP_VR_WHEEL_KART_DEGREES));
-        Assert.Equal(45.0, settings.Get<double>(settings.RECOMP_VR_WHEEL_BIKE_DEGREES));
-        Assert.Equal("off", settings.Get<string>(settings.RECOMP_VR_COCKPIT_ITEM_HAND));
-        Assert.True(settings.Get<bool>(settings.RECOMP_VR_COCKPIT_ITEM_THROW));
-        Assert.Equal(0.3, settings.Get<double>(settings.RECOMP_VR_COCKPIT_ITEM_SIZE));
+        var manager = new RecompSettingManager(Fs);
+        var settings = _context.CreateSettings(manager);
+        manager.LoadSettings(selection.ConfigPath);
+        Assert.True(settings.Get(settings.RECOMP_VR_FLAT_SCREEN));
+        Assert.False(settings.Get(settings.RECOMP_VR_IMMERSIVE_WINDOW));
+        Assert.True(settings.Get(settings.RECOMP_VR_FLAT_RACE_INTRO));
+        Assert.Equal(0.0, settings.Get(settings.RECOMP_VR_LEAN_BACK_DEGREES));
+        Assert.Equal("inside", settings.Get(settings.RECOMP_VR_BULLET_BILL_CAMERA));
+        Assert.Equal(0, settings.Get(settings.RECOMP_VR_FIRST_PERSON_HIDDEN_MODEL));
+        Assert.Equal("custom", settings.Get(settings.RECOMP_VR_FIRST_PERSON_SEAT));
+        Assert.True(settings.Get(settings.RECOMP_VR_BODY_IK));
+        Assert.False(settings.Get(settings.RECOMP_VR_BODY_IK_HANDS_ONLY));
+        Assert.Equal(90.0, settings.Get(settings.RECOMP_VR_BODY_IK_LEFT_HAND_ROLL));
+        Assert.Equal(-90.0, settings.Get(settings.RECOMP_VR_BODY_IK_RIGHT_HAND_ROLL));
+        Assert.False(settings.Get(settings.RECOMP_VR_PLACEHOLDER_STEERING_WHEEL));
+        Assert.Equal(120.0, settings.Get(settings.RECOMP_VR_WHEEL_KART_DEGREES));
+        Assert.Equal(45.0, settings.Get(settings.RECOMP_VR_WHEEL_BIKE_DEGREES));
+        Assert.Equal("off", settings.Get(settings.RECOMP_VR_COCKPIT_ITEM_HAND));
+        Assert.True(settings.Get(settings.RECOMP_VR_COCKPIT_ITEM_THROW));
+        Assert.Equal(0.3, settings.Get(settings.RECOMP_VR_COCKPIT_ITEM_SIZE));
 
         // Written as the runtime's own writer would: the model a whole TOML integer.
         settings.Set(settings.RECOMP_VR_FIRST_PERSON_HIDDEN_MODEL, -1);
         settings.Set(settings.RECOMP_VR_LEAN_BACK_DEGREES, -12.0);
         settings.Set(settings.RECOMP_VR_COCKPIT_ITEM_SIZE, 0.28);
         Assert.False(settings.Set(settings.RECOMP_VR_WHEEL_BIKE_DEGREES, 200.0));
-        var saved = _fs.File.ReadAllText(vr);
+        var saved = Fs.File.ReadAllText(vr);
         Assert.Contains("first_person_hidden_model = -1" + Environment.NewLine, saved);
         Assert.Contains("lean_back_degrees = -12.0", saved);
         Assert.Contains("cockpit_item_size = 0.28", saved);
         Assert.DoesNotContain("wheel_bike_degrees", saved);
-        manager.ReloadSettings();
-        Assert.Equal(-1, settings.Get<int>(settings.RECOMP_VR_FIRST_PERSON_HIDDEN_MODEL));
+        manager.ReloadSettings(selection.ConfigPath);
+        Assert.Equal(-1, settings.Get(settings.RECOMP_VR_FIRST_PERSON_HIDDEN_MODEL));
     }
 
     [Fact]
     public void ResettingVrSettingsRemovesOnlyTheirKeysWithTheirComments()
     {
-        var selection = new RecompBackendSelection();
-        selection.Restore(false, true);
-        var vr = selection.ConfigPath;
+        var vr = RecompBackend.OpenXR.Config(_context.Root);
         Write(
             vr,
             "[vr]\nenabled = false\ncontroller_mode = \"gamepad\"\n# Race view\n# Live.\nflat_screen = true\n"
                 + "first_person_seat = \"custom\"\n# Kept\nworld_units_per_meter = 400.0\nfirst_person = true\n\n"
                 + "[video]\nrender_scale = 2.0\n"
         );
-        var manager = new RecompSettingManager(_fs, selection);
-        manager.RemoveTomlSettings("vr", RecompVrConfig.PreferenceKeys);
+        var manager = new RecompSettingManager(Fs);
+        manager.RemoveTomlSettings(vr, "vr", RecompVrConfig.PreferenceKeys);
         // As the runtime's toml11 writer removes a key's comments with it; other sections keep theirs.
         Assert.Equal(
             "[vr]\nenabled = false\ncontroller_mode = \"gamepad\"\n# Kept\nworld_units_per_meter = 400.0\n\n[video]\nrender_scale = 2.0\n",
-            _fs.File.ReadAllText(vr).ReplaceLineEndings("\n")
+            Fs.File.ReadAllText(vr).ReplaceLineEndings("\n")
         );
     }
 
@@ -362,59 +353,69 @@ public sealed class RecompVrTests : IDisposable
     {
         if (!OperatingSystem.IsWindows())
             return;
-        var selection = new RecompBackendSelection();
+        var selection = _context.Selection;
         selection.Restore(true, false);
         Write(selection.ConfigPath, "[video]\nresolution_multiplier = 3.0\n");
-        var manager = new RecompSettingManager(_fs, selection);
-        var setting = new RecompSetting(typeof(double), ("video", "resolution_multiplier"), 1.0, manager.SaveSettings);
+        var manager = new RecompSettingManager(Fs);
+        var setting = new RecompSetting<double>(
+            ("video", "resolution_multiplier"),
+            1.0,
+            invoking => manager.SaveSettings(selection.ConfigPath, invoking)
+        );
         manager.RegisterSetting(setting);
-        manager.LoadSettings();
+        manager.LoadSettings(selection.ConfigPath);
         Assert.Equal(3.0, setting.Get());
         selection.Restore(false, true);
         Write(selection.ConfigPath, "[video]\n");
-        manager.ReloadSettings();
+        manager.ReloadSettings(selection.ConfigPath);
         Assert.Equal(1.0, setting.Get());
-        Assert.Equal("[video]\n", _fs.File.ReadAllText(selection.ConfigPath));
+        Assert.Equal("[video]\n", Fs.File.ReadAllText(selection.ConfigPath));
     }
 
     [Fact]
     public void PreferencesImportOnceWithoutChangingOfficialConfiguration()
     {
-        Write(PathManager.LegacyWheelWizardConfigFilePath, "{\"EnableRecomp\":true}");
-        var manager = new WhWzSettingManager(Substitute.For<ILogger<WhWzSettingManager>>(), _fs);
-        var setting = new WhWzSetting(typeof(bool), "EnableRecomp", false, manager.SaveSettings);
-        manager.RegisterSetting(setting);
-        manager.LoadSettings();
-        Assert.True((bool)setting.Get());
-        setting.Set(false);
-        Assert.Contains("true", _fs.File.ReadAllText(PathManager.LegacyWheelWizardConfigFilePath));
-        Assert.Contains("false", _fs.File.ReadAllText(PathManager.WheelWizardConfigFilePath));
+        var official = Fs.Path.Combine(_context.Root, "config.json");
+        Write(official, "{\"ForceWiimote\":true}");
+        var settings = _context.CreateSettings(whWzSettings: new WhWzSettingManager(Substitute.For<ILogger<WhWzSettingManager>>(), Fs));
+        settings.LoadSettings();
+        Assert.True(settings.Get(settings.FORCE_WIIMOTE));
+        Assert.True(settings.Set(settings.FORCE_WIIMOTE, false));
+        Assert.Contains("true", Fs.File.ReadAllText(official));
+        Assert.Contains("false", Fs.File.ReadAllText(Fs.Path.Combine(_context.Root, "config-vr.json")));
     }
 
     [Fact]
     public void SharedNandHonorsNormalCustomPathWithoutRewritingNormalConfig()
     {
-        var settings = SettingsTestUtils.InitializeSettingsRuntime(Path.GetFullPath("VrTests/Dolphin"));
-        var normal = PathManager.RecompConfigFilePath;
-        var vr = RecompBackend.OpenXR.Config(PathManager.WheelWizardAppdataPath);
-        var nand = Path.GetFullPath("VrTests/My # NAND");
-        _fs.Directory.CreateDirectory(nand);
+        var normal = _context.Paths.ConfigFilePath;
+        var vr = RecompBackend.OpenXR.Config(_context.Root);
+        var nand = Fs.Path.GetFullPath("/vr-tests/My # NAND");
+        Fs.Directory.CreateDirectory(nand);
         var original = "[paths]\nnand_root = " + RecompConfig.Quote(nand) + " # keep comment\n";
         Write(normal, original);
         Write(vr, "[paths]\n");
-        var data = new RecompDolphinDataService(settings, Substitute.For<IRecompSettingManager>(), _fs);
+        var data = new RecompDolphinDataService(
+            Substitute.For<ISettingsManager>(),
+            Substitute.For<IRecompSettingManager>(),
+            Fs,
+            Substitute.For<IDolphinDiscoveryService>(),
+            _context.Paths,
+            _context.ApplicationData,
+            _context.Selection
+        );
         Assert.True(data.ApplyNandToRecompConfig().IsSuccess);
-        Assert.Equal(original, _fs.File.ReadAllText(normal));
-        var stored = RecompConfig.ReadString(_fs, vr, "paths", "nand_root")!;
-        Assert.Equal(nand, Path.GetFullPath(stored, Path.GetDirectoryName(vr)!));
+        Assert.Equal(original, Fs.File.ReadAllText(normal));
+        var stored = RecompConfig.ReadString(Fs, vr, "paths", "nand_root")!;
+        Assert.Equal(nand, Fs.Path.GetFullPath(stored, Fs.Path.GetDirectoryName(vr)!));
     }
 
     [Fact]
     public void SharedLeaseRejectsOverlappingOperationsAndReleasesAfterFailure()
     {
-        using (RecompOperationCoordinator.Acquire(PathManager.WheelWizardAppdataPath, _fs))
-            Assert.Throws<IOException>(() => RecompOperationCoordinator.Acquire(PathManager.WheelWizardAppdataPath, _fs));
-        using var next = RecompOperationCoordinator.Acquire(PathManager.WheelWizardAppdataPath, _fs);
+        using (RecompOperationCoordinator.Acquire(_context.Root, Fs))
+            Assert.Throws<IOException>(() => RecompOperationCoordinator.Acquire(_context.Root, Fs));
+        using var next = RecompOperationCoordinator.Acquire(_context.Root, Fs);
         Assert.True(RecompOperationCoordinator.IsBusy);
     }
 

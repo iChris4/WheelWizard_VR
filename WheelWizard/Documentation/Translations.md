@@ -15,10 +15,28 @@ Use `t("key")` directly. No localization import is needed.
 ```csharp
 var text = t("action.save");
 var englishText = t("en.action.save");
-var message = t("snackbar_success.name_change", newName);
+var message = t("snackbar_success.name_change", new { name = newName });
 ```
 
-Arguments replace `{$1}`, `{$2}`, and so on.
+Anonymous-object properties replace named placeholders such as `%{name}` and `%{version}`. Names are case-sensitive. Missing arguments leave their placeholders unchanged; null values become empty text.
+
+```yaml
+items:
+  one: "%{name} has one item"
+  other: "%{name} has %{count} items"
+```
+
+```csharp
+var message = t("items", count: 12, new { name = "Alex" });
+```
+
+`count` selects the plural form and automatically fills `%{count}`: exactly 1 selects `one`, and every other value selects `other`. It is reserved: including a property named `count` in the argument object throws `ArgumentException`. Pass it only through the explicit `count:` argument.
+
+Use `.one` and `.other` for quantities, for example `t("time.days", count: days)`.
+
+An optional `.none` key describes an empty state. Callers must explicitly select it when appropriate: `amount == 0 ? t("items.none") : t("items", count: amount)`. Localization never selects `.none` automatically; a count of zero selects `.other`.
+
+`tFormat(text, new { name = "Alex" })` formats an already translated string.
 
 ## XAML
 

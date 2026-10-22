@@ -1,26 +1,31 @@
+using System.IO.Abstractions;
+using WheelWizard.ApplicationData;
 using WheelWizard.CustomDistributions;
+using WheelWizard.Launching;
 using WheelWizard.Models.Enums;
 using WheelWizard.Mods;
-using WheelWizard.Recomp.Domain;
-using WheelWizard.Services;
-using WheelWizard.Services.Launcher;
 using WheelWizard.Shared.MessageTranslations;
-using WheelWizard.Views.Popups.Generic;
 
 namespace WheelWizard.Recomp;
 
 /// <summary>
-/// Exposes the Mario Kart Wii recomp as a regular WheelWizard launcher. It owns nothing but the UI
-/// wiring: every decision about installing, updating and launching lives in <see cref="IRecompInstallService"/>,
-/// which in turn drives the recomp's setup executable. A shared lease covers preparation, setup,
-/// and the full game session across both backends and launcher processes.
+/// Coordinates distribution readiness, NAND choices and recomp setup through injected presentation.
+/// A shared lease covers preparation, setup, and the full game session across both backends and
+/// launcher processes.
 /// </summary>
 public class RecompLauncher(
     IRecompInstallService installService,
     ICustomDistributionSingletonService customDistributions,
     IModsLaunchService modsLaunchService,
     IRecompDolphinDataService dolphinData,
-    IRecompEnvironment environment
+    ICustomDistributionPaths distributionPaths,
+    IModOperationPresentation modPresentation,
+    IRecompPresentation presentation,
+    ILaunchPrompts launchPrompts,
+    IRecompEnvironment environment,
+    IRecompPaths paths,
+    IApplicationDataLocation applicationData,
+    IFileSystem fileSystem
 ) : ILauncher
 {
     private RecompGame _game = RecompGame.RetroRewind;
@@ -37,57 +42,39 @@ public class RecompLauncher(
 
     public async Task<OperationResult> Launch()
     {
-        using var cancellationTokenSource = new CancellationTokenSource();
-        var goal = t("progress.updating_recomp");
-        var progressWindow = new ProgressWindow(goal)
-            .SetGoal(goal)
-            .SetExtraText(t("progress.this_may_take_a_while"))
-            .SetCancellationTokenSource(cancellationTokenSource);
-        var progress = new Progress<RecompInstallProgress>(update =>
-        {
-            progressWindow.SetExtraText(update.Message);
-            progressWindow.UpdateProgress(update.Percent);
-        });
-
         try
         {
-            using var operation = RecompOperationCoordinator.Acquire();
-            RetroRewindContentTransaction.Recover(new Testably.Abstractions.RealFileSystem(), PathManager.RiivolutionWhWzFolderPath);
+            using var lease = RecompOperationCoordinator.Acquire(applicationData.DirectoryPath, fileSystem);
+            RetroRewindContentTransaction.Recover(fileSystem, distributionPaths.RootFolderPath);
             var nand = dolphinData.ApplyNandToRecompConfig();
             if (nand.IsFailure)
                 return nand;
-            var targetFolderPath = PathManager.PatchesFolderPath;
-            var clearTargetFolder = false;
-            if (_game == RecompGame.RetroRewind && modsLaunchService.ShouldAskToClearTargetFolder(targetFolderPath))
-            {
-                clearTargetFolder = await new YesNoWindow()
-                    .SetButtonText(t("action.delete"), t("action.keep"))
-                    .SetMainText(t("question.launch_clear_mods_found.title"))
-                    .SetExtraText(t("question.launch_clear_patches_found.extra"))
-                    .AwaitAnswer();
-            }
 
             if (_game == RecompGame.RetroRewind)
             {
-                var modsLaunchResult = await modsLaunchService.PrepareModsForLaunch(targetFolderPath, clearTargetFolder);
-                if (modsLaunchResult.IsFailure)
-                    return modsLaunchResult.Error;
+                var target = distributionPaths.PatchesFolderPath;
+                var clear = modsLaunchService.ShouldAskToClearTargetFolder(target) && await launchPrompts.ConfirmPatchCleanupAsync();
+                var modsResult = await modPresentation.RunAsync(
+                    (progress, _) => modsLaunchService.PrepareModsForLaunch(target, clear, progress)
+                );
+                if (modsResult.IsFailure)
+                    return modsResult;
             }
 
-            progressWindow.Show();
-            var reconciliation = await installService.ReconcileForLaunchAsync(progress, cancellationTokenSource.Token);
-            if (reconciliation.IsFailure)
-                return IsCancellationRequested(progressWindow, cancellationTokenSource)
-                    ? CancellationWarning("WiiCompiled launch preparation was cancelled.")
-                    : reconciliation;
+            var preparation = await presentation.RunAsync(
+                RecompOperationKind.PrepareLaunch,
+                async operation =>
+                {
+                    var result = await installService.ReconcileForLaunchAsync(operation.InstallProgress, operation.CancellationToken);
+                    if (operation.CancellationToken.IsCancellationRequested)
+                        return CancellationWarning("WiiCompiled launch preparation was cancelled.");
+                    return result;
+                }
+            );
+            if (preparation.IsFailure)
+                return preparation;
 
-            if (IsCancellationRequested(progressWindow, cancellationTokenSource))
-                return CancellationWarning("WiiCompiled launch preparation was cancelled.");
-
-            // Reconciliation is the only cancellable progress phase. The launch call is
-            // awaited through game exit.
-            progressWindow.SetCancellationTokenSource(null);
-            progressWindow.Close();
+            // The presentation scope closes before launching; the game session is not cancellable.
             return await installService.LaunchAsync(CancellationToken.None);
         }
         catch (OperationCanceledException)
@@ -98,10 +85,6 @@ public class RecompLauncher(
         {
             return Fail(ex.Message);
         }
-        finally
-        {
-            progressWindow.Close();
-        }
     }
 
     public async Task<OperationResult> Install()
@@ -109,7 +92,7 @@ public class RecompLauncher(
         IDisposable operation;
         try
         {
-            operation = RecompOperationCoordinator.Acquire();
+            operation = RecompOperationCoordinator.Acquire(applicationData.DirectoryPath, fileSystem);
         }
         catch (IOException ex)
         {
@@ -120,7 +103,7 @@ public class RecompLauncher(
         if (nandChoice.IsFailure)
             return nandChoice;
 
-        var installResult = await RunSetupAsync(t("progress.installing_recomp"));
+        var installResult = await RunSetupAsync(RecompOperationKind.Install);
         if (installResult.IsFailure)
             return installResult;
 
@@ -140,14 +123,14 @@ public class RecompLauncher(
         IDisposable operation;
         try
         {
-            operation = RecompOperationCoordinator.Acquire();
+            operation = RecompOperationCoordinator.Acquire(applicationData.DirectoryPath, fileSystem);
         }
         catch (IOException ex)
         {
             return Fail(ex.Message);
         }
         using var lease = operation;
-        var updateResult = await RunSetupAsync(t("progress.updating_recomp"));
+        var updateResult = await RunSetupAsync(RecompOperationKind.Update);
         if (updateResult.IsFailure)
             return updateResult;
 
@@ -171,9 +154,14 @@ public class RecompLauncher(
 
             switch (retroRewindStatus.Value)
             {
+                // This would mean that Wheel Wizard is configured to use Dolphin instead
+                case WheelWizardStatus.NoDolphinExtension:
+                    return WheelWizardStatus.ConfigNotFinished;
+
                 case WheelWizardStatus.ConfigNotFinished:
                 case WheelWizardStatus.NotInstalled:
                 case WheelWizardStatus.OutOfDate:
+                case WheelWizardStatus.NoRecompExtension:
                 case WheelWizardStatus.NoServer:
                     return retroRewindStatus.Value;
             }
@@ -197,14 +185,15 @@ public class RecompLauncher(
     /// A fresh install is the moment the user decides where WiiCompiled's Wii data comes from: their
     /// existing Dolphin NAND, a copy of it, or nothing. Dolphin advises against other programs using
     /// its NAND in place, so that trade-off is the user's call, not a silent default. An installed
-    /// setup keeps whatever was chosen before; the Recomp Settings page is where that changes later.
+    /// setup keeps whatever was chosen before, and so does a second backend installed beside the
+    /// normal one; the Recomp Settings page is where that changes later.
     /// </summary>
     private async Task<OperationResult> AskForDolphinNandChoiceAsync()
     {
         if (
             installService.IsInstalled
-            || File.Exists(PathManager.RecompConfigFilePath)
-            || Directory.Exists(PathManager.RecompPrivateNandFolderPath)
+            || fileSystem.File.Exists(paths.ConfigFilePath)
+            || fileSystem.Directory.Exists(paths.PrivateNandFolderPath)
         )
             return Ok();
 
@@ -217,10 +206,7 @@ public class RecompLauncher(
             return Ok();
         }
 
-        var useDolphinData = await new YesNoWindow()
-            .SetMainText(t("question.recomp_use_dolphin_nand.title"))
-            .SetExtraText(t("question.recomp_use_dolphin_nand.extra"))
-            .AwaitAnswer();
+        var useDolphinData = await presentation.ConfirmUseDolphinDataAsync();
         if (!useDolphinData)
         {
             dolphinData.SetSharingEnabled(false);
@@ -228,11 +214,7 @@ public class RecompLauncher(
             return Ok();
         }
 
-        var copyNand = await new YesNoWindow()
-            .SetMainText(t("question.recomp_nand_mode.title"))
-            .SetExtraText(t("question.recomp_nand_mode.extra"))
-            .SetButtonText(t("action.recomp_nand_copy"), t("action.recomp_nand_share"))
-            .AwaitAnswer();
+        var copyNand = await presentation.ConfirmCopyDolphinDataAsync();
         if (!copyNand)
         {
             dolphinData.SetCopyEnabled(false);
@@ -240,18 +222,9 @@ public class RecompLauncher(
             return Ok();
         }
 
-        var copyWindow = new ProgressWindow(t("progress.recomp_copying_nand")).SetGoal(t("progress.recomp_copying_nand"));
-        copyWindow.Show();
-        try
-        {
-            var copyResult = await Task.Run(dolphinData.CopyNandForRecomp);
-            if (copyResult.IsFailure)
-                return copyResult;
-        }
-        finally
-        {
-            copyWindow.Close();
-        }
+        var copyResult = await presentation.RunAsync(RecompOperationKind.CopyNand, _ => Task.Run(dolphinData.CopyNandForRecomp));
+        if (copyResult.IsFailure)
+            return copyResult;
 
         // Flipped only after the copy durably exists, so a failed copy can never leave the settings
         // pointing at a NAND that is not there.
@@ -260,111 +233,70 @@ public class RecompLauncher(
         return Ok();
     }
 
-    private async Task<OperationResult> RunSetupAsync(string goal)
+    private async Task<OperationResult> RunSetupAsync(RecompOperationKind kind)
     {
-        using var cancellationTokenSource = new CancellationTokenSource();
-
-        // Constructed on the UI thread, so Progress<T> marshals every update back to it for us.
-        var progressWindow = new ProgressWindow(goal)
-            .SetGoal(goal)
-            .SetExtraText(t("progress.this_may_take_a_while"))
-            .SetCancellationTokenSource(cancellationTokenSource);
-
-        var progress = new Progress<RecompInstallProgress>(update =>
-        {
-            progressWindow.SetExtraText(update.Message);
-            progressWindow.UpdateProgress(update.Percent);
-        });
-
         try
         {
-            progressWindow.Show();
+            return await presentation.RunAsync(
+                kind,
+                async operation =>
+                {
+                    var retroRewindResult = await EnsureRetroRewindCurrentAsync(operation.DistributionOperation);
+                    if (retroRewindResult.IsFailure)
+                        return operation.CancellationToken.IsCancellationRequested
+                            ? CancellationWarning("WiiCompiled installation was cancelled.")
+                            : retroRewindResult.Error;
 
-            var retroRewindResult = await EnsureRetroRewindCurrentAsync(progressWindow, cancellationTokenSource.Token);
-            if (retroRewindResult.IsFailure)
-                return IsCancellationRequested(progressWindow, cancellationTokenSource)
-                    ? CancellationWarning("WiiCompiled installation was cancelled.")
-                    : retroRewindResult.Error;
+                    var committed = retroRewindResult.Value;
+                    if (!committed && operation.CancellationToken.IsCancellationRequested)
+                        return CancellationWarning("WiiCompiled installation was cancelled.");
 
-            var retroRewindCommitted = retroRewindResult.Value;
-            if (!retroRewindCommitted && IsCancellationRequested(progressWindow, cancellationTokenSource))
-                return CancellationWarning("WiiCompiled installation was cancelled.");
-
-            if (retroRewindCommitted)
-            {
-                // RR is now durably published. The paired recomp reconciliation is the second
-                // half of that commit and must finish even if Cancel raced the RR commit point.
-                // Disable the button at this commit barrier: reporting "cancelled" after both
-                // halves complete would invite an unnecessary retry of a successful operation.
-                progressWindow.SetCancellationTokenSource(null);
-            }
-
-            // The Retro Rewind commit is a barrier: once it is durable, the matching recomp
-            // check (and any repair it demands) must run to completion, so it is deliberately
-            // handed an uncancellable token. Whatever the backend reports is the truth.
-            var installResult = await installService.InstallAsync(
-                progress,
-                ConfirmOfflineInstallAsync,
-                retroRewindCommitted ? CancellationToken.None : cancellationTokenSource.Token
+                    // Once RR succeeds, the matching recomp reconciliation must finish even if Cancel races completion.
+                    operation.Report(new(CanCancel: !committed));
+                    var result = await installService.InstallAsync(
+                        operation.InstallProgress,
+                        presentation.ConfirmOfflineInstallAsync,
+                        committed ? CancellationToken.None : operation.CancellationToken
+                    );
+                    return result.IsFailure && !committed && operation.CancellationToken.IsCancellationRequested
+                        ? CancellationWarning("WiiCompiled installation was cancelled.")
+                        : result;
+                }
             );
-
-            // A successful terminal result wins a race with Cancel. Otherwise, a cancellation that
-            // was still allowed at this point is a user-controlled warning, not an unknown error.
-            return installResult.IsFailure && !retroRewindCommitted && IsCancellationRequested(progressWindow, cancellationTokenSource)
-                ? CancellationWarning("WiiCompiled installation was cancelled.")
-                : installResult;
         }
         catch (OperationCanceledException)
         {
             return CancellationWarning("WiiCompiled installation was cancelled.");
         }
-        finally
-        {
-            progressWindow.Close();
-        }
     }
-
-    private static bool IsCancellationRequested(ProgressWindow progressWindow, CancellationTokenSource cancellationTokenSource) =>
-        progressWindow.WasCancellationRequested || cancellationTokenSource.IsCancellationRequested;
 
     private static OperationError CancellationWarning(string message) => Fail(message, MessageTranslation.Warning_RecompOperationCancelled);
 
-    /// <summary>
-    /// Asked by the install service only when a Retro Rewind build is needed and the Retro-WFC payload
-    /// service is down. Offline-only is a real choice, not a silent downgrade: the game plays, online
-    /// does not, and the next update after the service returns rebuilds with online play automatically.
-    /// </summary>
-    private static Task<bool> ConfirmOfflineInstallAsync() =>
-        new YesNoWindow()
-            .SetButtonText(t("action.recomp_install_offline"), t("action.cancel"))
-            .SetMainText(t("question.recomp_retro_wfc_unavailable.title"))
-            .SetExtraText(t("question.recomp_retro_wfc_unavailable.extra"))
-            .AwaitAnswer();
-
-    private async Task<OperationResult<bool>> EnsureRetroRewindCurrentAsync(
-        ProgressWindow progressWindow,
-        CancellationToken cancellationToken
-    )
+    private async Task<OperationResult<bool>> EnsureRetroRewindCurrentAsync(DistributionOperation operation)
     {
-        cancellationToken.ThrowIfCancellationRequested();
+        operation.CancellationToken.ThrowIfCancellationRequested();
         var status = await customDistributions.RetroRewind.GetCurrentStatusAsync();
         if (status.IsFailure)
             return status.Error;
 
         var requiresCommit = status.Value is WheelWizardStatus.NotInstalled or WheelWizardStatus.OutOfDate;
-        OperationResult result = status.Value switch
+        var result = status.Value switch
         {
             WheelWizardStatus.Ready or WheelWizardStatus.NoServerButInstalled => Ok(),
-            WheelWizardStatus.NotInstalled => await customDistributions.RetroRewind.InstallAsync(progressWindow),
-            WheelWizardStatus.OutOfDate => await customDistributions.RetroRewind.UpdateAsync(progressWindow),
+            WheelWizardStatus.NotInstalled => await customDistributions.RetroRewind.InstallAsync(operation),
+            WheelWizardStatus.OutOfDate => await customDistributions.RetroRewind.UpdateAsync(operation),
             WheelWizardStatus.ConfigNotFinished => Fail(t("message_warning.not_find_game.extra")),
+            WheelWizardStatus.NoRecompExtension => Fail(
+                "Retro Rewind was not checked because the Wiicompiled Flatpak extension is missing"
+            ),
+            WheelWizardStatus.NoDolphinExtension => Fail("Retro Rewind was not checked because the Dolphin Flatpak extension is missing"),
             WheelWizardStatus.NoServer => Fail("Retro Rewind could not be checked or installed because its update service is unavailable."),
             _ => Fail("Retro Rewind is not ready for WiiCompiled."),
         };
 
         if (result.IsFailure)
             return result.Error;
-        if (!requiresCommit && (progressWindow.WasCancellationRequested || cancellationToken.IsCancellationRequested))
+        if (!requiresCommit && operation.CancellationToken.IsCancellationRequested)
             return Fail("Retro Rewind update was cancelled.");
         return Ok(requiresCommit);
     }

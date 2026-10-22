@@ -1,0 +1,9 @@
+<dialogBase:ModalContent xmlns="https://github.com/avaloniaui"
+                         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                         xmlns:dialogBase="clr-namespace:WheelWizard.Views.Dialogs.Base"
+                         x:Class="WheelWizard.Mods.Views.Dialogs.ModIndependentWindow">
+    <Grid Width="760" MinHeight="600" MaxHeight="780">
+        <ContentControl x:Name="ModDetailHost"
+                        HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" />
+    </Grid>
+</dialogBase:ModalContent>

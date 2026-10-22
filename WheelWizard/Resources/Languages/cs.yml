@@ -105,9 +105,11 @@ cs:
   action:
     play: "Hrát"
     play_offline: "Hrát Offline"
+    play_anyway: "Přesto hrát"
     install: "Nainstalovat"
     update: "Aktualizovat"
     import: "Importovat"
+    clone: "Klonovat"
     enable_all: "Zapnout Vše"
     disable_all: "Vypnout Vše"
     rename: "Přejmenovat"
@@ -126,14 +128,17 @@ cs:
     revert: "Vrátit"
     maybe_later: "Možná Později"
     browse: "Prohlížet"
+    change: "Změnit"
     view_mod: "Zobrazit Mod"
     save_external_mii: "Přidat Mii do \"Moje Miiy“"
-    view_mii: "Zobrazit Mii"
     duplicate: "Duplikovat"
     back: "Zpět"
     unfavorite: "Odebrat z Oblíbených"
     favorite: "Dát do Oblíbených"
     view_room: "Zobrazit Místnost"
+    recomp_nand_copy: "Vytvořit kopii"
+    recomp_nand_share: "Použít přímo"
+    recomp_install_offline: "Instalovat pouze offline"
     link:
       discord: "Mluvte s námi!"
       github: "Zdrojový kód"
@@ -162,30 +167,29 @@ cs:
     miis: "Miiy"
   text:
     made_by_string: |-
-      Vytvořili: {$1}
-      a {$2}
+      Vytvořili: %{firstAuthor}
+      a %{secondAuthor}
     thanks_translators: "Díky moc všem překladatelům:"
-    wh_wz_translation_percentage: "Překlady pro tento jazyk jsou z {$1}% kompletní"
+    wh_wz_translation_percentage: "Překlady pro tento jazyk jsou z %{percentage}% kompletní"
     powered_gamebanana: "Poháněno společností GameBanana"
-    language_translated_by: "Tento jazyk překládá: {$1}"
+    language_translated_by: "Tento jazyk překládá: %{translators}"
   hover:
     players_online:
-      0: "Právě nejsou žádní hráči online"
-      1: "Právě je 1 hráč online"
-      n: "Právě jsou {$1} hráči online"
+      none: "Právě nejsou žádní hráči online"
+      one: "Právě je 1 hráč online"
+      other: "Právě jsou %{count} hráči online"
     rooms_online:
-      0: "Momentálně nejsou žádné aktivní místnosti"
-      1: "Momentálně je aktivní 1 místnost"
-      n: "Momentálně jsou aktivní {$1} místnosti"
+      none: "Momentálně nejsou žádné aktivní místnosti"
+      one: "Momentálně je aktivní 1 místnost"
+      other: "Momentálně jsou aktivní %{count} místnosti"
     friends_online:
-      0: "Právě nejsou žádní kamarádi online"
-      1: "Právě je 1 kamarád online"
-      n: "Právě jsou {$1} kamarádi online"
+      none: "Právě nejsou žádní kamarádi online"
+      one: "Právě je 1 kamarád online"
+      other: "Právě jsou %{count} kamarádi online"
     rooms_page_disclaimer: |-
       Upozorňujeme, že tato stránka nenabízí žádnou funkci pro přímé připojení k místnosti.
       Chceš-li se připojit ke konkrétní místnosti, budeš se muset buď připojit prostřednictvím kamaráda, nebo doufat, že se k ní připojíš připojením k online serverům.
     friends_page_disclaimer: "Chceš-li přidat kamarády, musíš je přidat ve hře."
-    region_user_selection: "To ukazuje pouze regiony, ve kterých TY jsi hrál"
     primary_profile: "Primární profil se používá jako reference v klientovi Wheel Wizard"
   empty_content:
     no_profiles: "Hru musíš hrát aspoň jednou, abys viděl tvé profily zde uvedené"
@@ -201,22 +205,22 @@ cs:
     no_mod_selected: "Vyber mod v seznamu pro zobrazení jeho podrobností"
   time:
     days:
-      1: "1 den"
-      n: "{$1} dny"
+      one: "1 den"
+      other: "%{count} dny"
     hours:
-      1: "1 hodina"
-      n: "{$1} hodiny"
+      one: "1 hodina"
+      other: "%{count} hodiny"
     minutes:
-      1: "1 minuta"
-      n: "{$1} minuty"
+      one: "1 minuta"
+      other: "%{count} minuty"
     seconds:
-      1: "1 sekunda"
-      n: "{$1} sekundy"
+      one: "1 sekunda"
+      other: "%{count} sekundy"
   progress:
     estimated_time_remaining: "Předpokládaný zbývající čas:"
-    downloading_mb: "Stahování {$1} MB"
+    downloading_mb: "Stahování %{megabytes} MB"
     installing_mods: "Instalování mody"
-    installing_mods_count: "Instalování {$1} mody"
+    installing_mods_count: "Instalování %{amount} mody"
     update_rr: "Aktualizování Retro Rewind"
     update_wh_wz: "Aktualizování Wheel Wizard"
     installing_rr: "Instalování Retro Rewind"
@@ -227,9 +231,9 @@ cs:
       title: "Nalezené mody"
       extra: "Chystáš se spustit hru bez jakýchkoliv modů. Chceš vymazat složku my-stuff?"
     sure_delete:
-      title: "Opravdu chceš smazat {$1}?"
+      title: "Opravdu chceš smazat %{name}?"
       extra: "Smazání je trvalé a není možné je vrátit zpět."
-      title_miis: "Opravdu chceš smazat {$1} Miiy?"
+      title_miis: "Opravdu chceš smazat %{amount} Miiy?"
     dolphin_found:
       title: "Nalezena Složka Dolphin Emulator"
     update_admin:
@@ -249,11 +253,11 @@ cs:
     dolphin_flatpak:
       title: "Instalace Dolphin Flatpak"
     install_mod:
-      title: "Chceš stáhnout a nainstalovat mod: {$1}?"
+      title: "Chceš stáhnout a nainstalovat mod: %{modName}?"
     search_mod: "Hledej mody..."
     enter_new_name:
       title: "Zadej nové jméno"
-      extra: "Změna jména z: {$1}"
+      extra: "Změna jména z: %{name}"
   message_warning:
     not_find_dolphin:
       extra: "Nepodařilo se najít Dolphin Emulator, prosím nastav cestu v nastavení."
@@ -263,7 +267,7 @@ cs:
       title: "Vybráno Více Souborů"
     invalid_name:
       extra:
-        mod_name_exists: "Mod s jménem '{$1}' již existuje."
+        mod_name_exists: "Mod s jménem '%{modName}' již existuje."
       title: "Jméno není možné."
     invalid_paths:
       extra: "Zkontroluj prosím, zda jsou všechny cesty správné, a zkus to znovu."
@@ -328,7 +332,7 @@ cs:
       title: "Načtení informací o modu se nezdařilo"
     mod_download_fail:
       title: "Stažení modu se nezdařilo."
-      extra: "Během stahování došlo k chybě: {$1}"
+      extra: "Během stahování došlo k chybě: %{error}"
   message_success:
     settings_saved:
       title: "Nastavení bylo úspěšně uloženo!"
@@ -342,10 +346,10 @@ cs:
   snackbar_success:
     mii_added: "Mii byl přidán do tvého Miiy"
     copied_fc: "Zkopírovaný kód kamaráda do schránky"
-    name_change: "Úspěšně změněn jméno na '{$1}'"
-    saved_mii: "Uloženo Mii '{$1}' do souboru '{$2}'"
-    deleted: "Smazáno '{$1}'"
-    deleted_miis: "Smazáno {$1} Miiy"
+    name_change: "Úspěšně změněn jméno na '%{name}'"
+    saved_mii: "Uloženo Mii '%{name}' do souboru '%{fileName}'"
+    deleted: "Smazáno '%{name}'"
+    deleted_miis: "Smazáno %{amount} Miiy"
     profile_set_primary: "Nastavit profil jako primární"
   helper_note:
     name_must_between: "Jména musí mít délku 3 až 10 znaků."
