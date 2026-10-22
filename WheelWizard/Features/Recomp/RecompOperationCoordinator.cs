@@ -6,6 +6,8 @@ namespace WheelWizard.Recomp;
 /// <summary>One fail-fast lease covers shared content and NAND through the entire game session.</summary>
 public static class RecompOperationCoordinator
 {
+    // What a caller that passes no file system (a view, RunAsync) gets.
+    private static readonly IFileSystem RealFileSystem = new Testably.Abstractions.RealFileSystem();
     private static int _active;
     public const string BusyMessage = "A game or WiiCompiled operation is already running. Close it before changing modes or shared data.";
     public static bool IsBusy => Volatile.Read(ref _active) != 0;
@@ -34,28 +36,22 @@ public static class RecompOperationCoordinator
     {
         if (Interlocked.CompareExchange(ref _active, 1, 0) != 0)
             throw new IOException(BusyMessage);
+        var fs = fileSystem ?? RealFileSystem;
         Stream? stream = null;
         Stream? userLease = null;
         try
         {
             // Stable across app-data moves and separate portable launcher copies sharing a NAND.
-            var coordinatorRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "WheelWizardVR");
-            if (fileSystem is null)
-                Directory.CreateDirectory(coordinatorRoot);
-            else
-                fileSystem.Directory.CreateDirectory(coordinatorRoot);
-            var userLockPath = Path.Combine(coordinatorRoot, ".shared-operation.lock");
-            userLease = fileSystem is null
-                ? new FileStream(userLockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None)
-                : fileSystem.FileStream.New(userLockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
-            if (fileSystem is null)
-                Directory.CreateDirectory(appData);
-            else
-                fileSystem.Directory.CreateDirectory(appData);
-            var lockPath = Path.Combine(appData, ".wiicompiled-shared-operation.lock");
-            stream = fileSystem is null
-                ? new FileStream(lockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None)
-                : fileSystem.FileStream.New(lockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+            var coordinatorRoot = fs.Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "WheelWizardVR"
+            );
+            fs.Directory.CreateDirectory(coordinatorRoot);
+            var userLockPath = fs.Path.Combine(coordinatorRoot, ".shared-operation.lock");
+            userLease = fs.FileStream.New(userLockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+            fs.Directory.CreateDirectory(appData);
+            var lockPath = fs.Path.Combine(appData, ".wiicompiled-shared-operation.lock");
+            stream = fs.FileStream.New(lockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
             if (relocating)
             {
                 stream.Dispose();
@@ -64,18 +60,13 @@ public static class RecompOperationCoordinator
             foreach (var backend in new[] { RecompBackend.Normal, RecompBackend.OpenXR })
             {
                 var root = backend.Root(appData);
-                if (!(fileSystem?.Directory.Exists(root) ?? Directory.Exists(root)))
+                if (!fs.Directory.Exists(root))
                     continue;
-                var locks =
-                    fileSystem?.Directory.EnumerateFiles(root, ".mkwc-operation-*.lock")
-                    ?? Directory.EnumerateFiles(root, ".mkwc-operation-*.lock");
-                foreach (var path in locks)
+                foreach (var path in fs.Directory.EnumerateFiles(root, ".mkwc-operation-*.lock"))
                 {
-                    using Stream probe = fileSystem is null
-                        ? new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None)
-                        : fileSystem.FileStream.New(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+                    using Stream probe = fs.FileStream.New(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
                 }
-                EnsureNoRunningProduct(backend.Install(appData));
+                EnsureNoRunningProduct(fs, backend.Install(appData));
             }
             Changed?.Invoke();
             return new Lease(userLease, stream);
@@ -89,9 +80,9 @@ public static class RecompOperationCoordinator
         }
     }
 
-    private static void EnsureNoRunningProduct(string install)
+    private static void EnsureNoRunningProduct(IFileSystem fs, string install)
     {
-        var prefix = Path.GetFullPath(install).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        var prefix = fs.Path.GetFullPath(install).TrimEnd(fs.Path.DirectorySeparatorChar) + fs.Path.DirectorySeparatorChar;
         foreach (var process in Process.GetProcesses())
         {
             using (process)

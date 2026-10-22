@@ -890,14 +890,14 @@ public sealed class RecompInstallService : IRecompInstallService
     /// same file the release page shows. A name that is not a plain <c>.apk</c> file name falls back
     /// to one built from the release tag.
     /// </summary>
-    private static string BuildCachedQuestAppFileName(RecompQuestApp app)
+    private string BuildCachedQuestAppFileName(RecompQuestApp app)
     {
         var name = app.FileName;
         if (
             !string.IsNullOrWhiteSpace(name)
             && name.EndsWith(".apk", StringComparison.OrdinalIgnoreCase)
-            && name.IndexOfAny(Path.GetInvalidFileNameChars()) < 0
-            && name == Path.GetFileName(name)
+            && name.IndexOfAny(fileSystem.Path.GetInvalidFileNameChars()) < 0
+            && name == fileSystem.Path.GetFileName(name)
         )
             return name;
 

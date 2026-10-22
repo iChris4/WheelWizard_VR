@@ -35,16 +35,16 @@ public sealed class RetroRewindContentTransaction : IDisposable
         _journal = new()
         {
             Id = Guid.NewGuid().ToString("N"),
-            Existed = ContentFolders.Select(name => fs.Directory.Exists(Path.Combine(_root, name))).ToArray(),
+            Existed = ContentFolders.Select(name => fs.Directory.Exists(fs.Path.Combine(_root, name))).ToArray(),
         };
-        StageRoot = Path.Combine(WorkRoot(_root, _journal), "stage");
+        StageRoot = fs.Path.Combine(WorkRoot(fs, _root, _journal), "stage");
         WriteJournal();
         try
         {
             foreach (var name in ContentFolders)
             {
-                var source = Path.Combine(_root, name);
-                var destination = Path.Combine(StageRoot, name);
+                var source = fs.Path.Combine(_root, name);
+                var destination = fs.Path.Combine(StageRoot, name);
                 fs.Directory.CreateDirectory(destination);
                 if (fs.Directory.Exists(source))
                     CopyTree(source, destination);
@@ -58,15 +58,15 @@ public sealed class RetroRewindContentTransaction : IDisposable
         }
     }
 
-    public static bool HasPending(IFileSystem fs, string root) => fs.File.Exists(Path.Combine(root, JournalName));
+    public static bool HasPending(IFileSystem fs, string root) => fs.File.Exists(fs.Path.Combine(root, JournalName));
 
-    private static string WorkRoot(string root, Journal journal) => Path.Combine(root, ".rr-transaction-" + journal.Id);
+    private static string WorkRoot(IFileSystem fs, string root, Journal journal) => fs.Path.Combine(root, ".rr-transaction-" + journal.Id);
 
-    private void WriteJournal() => RecompConfig.WriteAtomic(_fs, Path.Combine(_root, JournalName), JsonSerializer.Serialize(_journal));
+    private void WriteJournal() => RecompConfig.WriteAtomic(_fs, _fs.Path.Combine(_root, JournalName), JsonSerializer.Serialize(_journal));
 
     public static void Recover(IFileSystem fs, string root)
     {
-        var journalPath = Path.Combine(root, JournalName);
+        var journalPath = fs.Path.Combine(root, JournalName);
         if (!fs.File.Exists(journalPath))
             return;
         EnsurePlainPath(fs, root);
@@ -79,20 +79,20 @@ public sealed class RetroRewindContentTransaction : IDisposable
             || journal.Phase is not ("preparing" or "committing" or "committed")
         )
             throw new IOException("Invalid Retro Rewind recovery journal. Preserve it for recovery.");
-        var work = WorkRoot(root, journal);
+        var work = WorkRoot(fs, root, journal);
         EnsurePlainPath(fs, work);
         if (journal.Phase == "committing")
         {
             for (var i = 0; i < ContentFolders.Length; i++)
             {
-                var live = Path.Combine(root, ContentFolders[i]);
-                var backup = Path.Combine(work, "backup", ContentFolders[i]);
+                var live = fs.Path.Combine(root, ContentFolders[i]);
+                var backup = fs.Path.Combine(work, "backup", ContentFolders[i]);
                 if (fs.Directory.Exists(backup))
                 {
                     DeleteTree(fs, live);
                     fs.Directory.Move(backup, live);
                 }
-                else if (!journal.Existed[i] && !fs.Directory.Exists(Path.Combine(work, "stage", ContentFolders[i])))
+                else if (!journal.Existed[i] && !fs.Directory.Exists(fs.Path.Combine(work, "stage", ContentFolders[i])))
                     DeleteTree(fs, live);
             }
         }
@@ -107,15 +107,15 @@ public sealed class RetroRewindContentTransaction : IDisposable
         foreach (var file in _fs.Directory.EnumerateFiles(source))
         {
             EnsurePlainPath(_fs, file);
-            _fs.File.Copy(file, Path.Combine(destination, Path.GetFileName(file)), false);
+            _fs.File.Copy(file, _fs.Path.Combine(destination, _fs.Path.GetFileName(file)), false);
         }
         foreach (var directory in _fs.Directory.EnumerateDirectories(source))
-            CopyTree(directory, Path.Combine(destination, Path.GetFileName(directory)));
+            CopyTree(directory, _fs.Path.Combine(destination, _fs.Path.GetFileName(directory)));
     }
 
     private void ReadSaveRoots()
     {
-        var xml = Path.Combine(StageRoot, "riivolution", "RetroRewind6.xml");
+        var xml = _fs.Path.Combine(StageRoot, "riivolution", "RetroRewind6.xml");
         if (!_fs.File.Exists(xml))
             return;
         using var stream = _fs.File.OpenRead(xml);
@@ -161,8 +161,8 @@ public sealed class RetroRewindContentTransaction : IDisposable
             )
         )
             throw new IOException("Retro Rewind content path is outside its managed folders.");
-        var path = _fs.Path.GetFullPath(Path.Combine(StageRoot, normalized));
-        if (!path.StartsWith(StageRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+        var path = _fs.Path.GetFullPath(_fs.Path.Combine(StageRoot, normalized));
+        if (!path.StartsWith(StageRoot + _fs.Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
             throw new IOException("Unsafe content path.");
         EnsurePlainPath(_fs, path);
         return path;
@@ -225,7 +225,7 @@ public sealed class RetroRewindContentTransaction : IDisposable
                 _fs.Directory.CreateDirectory(path);
                 continue;
             }
-            _fs.Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            _fs.Directory.CreateDirectory(_fs.Path.GetDirectoryName(path)!);
             using var input = entry.Open();
             using var output = _fs.File.Create(path);
             input.CopyTo(output);
@@ -233,23 +233,23 @@ public sealed class RetroRewindContentTransaction : IDisposable
         }
     }
 
-    public void SetVersion(string version) => _fs.File.WriteAllText(Path.Combine(StageRoot, "RetroRewind6", "version.txt"), version);
+    public void SetVersion(string version) => _fs.File.WriteAllText(_fs.Path.Combine(StageRoot, "RetroRewind6", "version.txt"), version);
 
     public void Commit()
     {
         _journal.Phase = "committing";
         WriteJournal();
-        var backupRoot = Path.Combine(WorkRoot(_root, _journal), "backup");
+        var backupRoot = _fs.Path.Combine(WorkRoot(_fs, _root, _journal), "backup");
         _fs.Directory.CreateDirectory(backupRoot);
         try
         {
             foreach (var name in ContentFolders)
             {
-                var live = Path.Combine(_root, name);
+                var live = _fs.Path.Combine(_root, name);
                 EnsurePlainPath(_fs, live);
                 if (_fs.Directory.Exists(live))
-                    _fs.Directory.Move(live, Path.Combine(backupRoot, name));
-                _fs.Directory.Move(Path.Combine(StageRoot, name), live);
+                    _fs.Directory.Move(live, _fs.Path.Combine(backupRoot, name));
+                _fs.Directory.Move(_fs.Path.Combine(StageRoot, name), live);
             }
             _journal.Phase = "committed";
             WriteJournal();

@@ -25,6 +25,8 @@ public sealed record RecompBackend(
     string? ProductId
 )
 {
+    private static readonly System.IO.Abstractions.IPath NativePath = new Testably.Abstractions.RealFileSystem().Path;
+
     public const string VrProductId = "wiicompiled-openxr-vr";
     public static readonly RecompBackend Normal = new(
         RecompBackendKind.Normal,
@@ -45,13 +47,13 @@ public sealed record RecompBackend(
 
     public static RecompBackend For(RecompBackendKind kind) => kind == RecompBackendKind.OpenXR ? OpenXR : Normal;
 
-    public string Root(string appData) => Path.Combine(appData, FolderName);
+    public string Root(string appData) => NativePath.Combine(appData, FolderName);
 
-    public string Install(string appData) => Path.Combine(Root(appData), "Install");
+    public string Install(string appData) => NativePath.Combine(Root(appData), "Install");
 
-    public string UserData(string appData) => Path.Combine(Root(appData), "UserData");
+    public string UserData(string appData) => NativePath.Combine(Root(appData), "UserData");
 
-    public string Config(string appData) => Path.Combine(UserData(appData), "Config.toml");
+    public string Config(string appData) => NativePath.Combine(UserData(appData), "Config.toml");
 }
 
 /// <summary>Independent of SettingsManager to avoid a configuration/DI dependency cycle.</summary>

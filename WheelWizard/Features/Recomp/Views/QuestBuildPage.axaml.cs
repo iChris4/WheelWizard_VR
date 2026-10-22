@@ -1,3 +1,4 @@
+using System.IO.Abstractions;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
@@ -35,6 +36,8 @@ public partial class QuestBuildPage : UserControl
 
     private bool _supported;
 
+    private readonly IFileSystem fileSystem;
+
     private ISettingsManager SettingsService { get; }
 
     private IFilePickerService FilePicker { get; }
@@ -46,6 +49,7 @@ public partial class QuestBuildPage : UserControl
     private IRecompInstallService? RecompInstallService { get; }
 
     public QuestBuildPage(
+        IFileSystem fileSystem,
         ISettingsManager settingsService,
         IFilePickerService filePicker,
         IApplicationDataLocation applicationData,
@@ -53,6 +57,7 @@ public partial class QuestBuildPage : UserControl
         IRecompInstallService? recompInstallService = null
     )
     {
+        this.fileSystem = fileSystem;
         SettingsService = settingsService;
         FilePicker = filePicker;
         ApplicationData = applicationData;
@@ -159,15 +164,15 @@ public partial class QuestBuildPage : UserControl
         var openFolder = await new YesNoWindow()
             .SetMainText("The Quest game is ready")
             .SetExtraText(
-                $"{Path.GetFileName(package.Path)} ({size}) was saved. Copy it to the headset, for example into its "
+                $"{fileSystem.Path.GetFileName(package.Path)} ({size}) was saved. Copy it to the headset, for example into its "
                     + "Download folder over USB, then open the WiiCompiled Quest app and press Import from computer."
                     + $"\n\nThe game fits {app.DisplayName}. If the headset runs another version, install "
-                    + $"{Path.GetFileName(apkPath)} from {Path.GetDirectoryName(apkPath)} on it first."
+                    + $"{fileSystem.Path.GetFileName(apkPath)} from {fileSystem.Path.GetDirectoryName(apkPath)} on it first."
             )
             .SetButtonText("Open folder", "Close")
             .AwaitAnswer();
-        var folder = Path.GetDirectoryName(package.Path);
-        if (openFolder && Directory.Exists(folder))
+        var folder = fileSystem.Path.GetDirectoryName(package.Path);
+        if (openFolder && fileSystem.Directory.Exists(folder))
             FilePicker.OpenFolderInFileManager(folder);
     }
 
@@ -186,7 +191,7 @@ public partial class QuestBuildPage : UserControl
         IDisposable operation;
         try
         {
-            operation = RecompOperationCoordinator.Acquire(ApplicationData.DirectoryPath);
+            operation = RecompOperationCoordinator.Acquire(ApplicationData.DirectoryPath, fileSystem);
         }
         catch (IOException)
         {
