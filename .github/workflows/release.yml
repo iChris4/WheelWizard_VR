@@ -54,11 +54,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $release = gh release view --repo iChris4/Wiicompiled_VR --json tagName,assets | ConvertFrom-Json
-          if ($LASTEXITCODE -ne 0 -or $release.tagName -notmatch '^v\d+\.\d+\.\d+$') { throw 'Publish the VR backend first.' }
+          # The backend's releases are tagged with or without a leading v (0.2.46 has none).
+          if ($LASTEXITCODE -ne 0 -or $release.tagName -notmatch '^v?\d+\.\d+\.\d+$') { throw 'Publish the VR backend first.' }
           gh release download $release.tagName --repo iChris4/Wiicompiled_VR --pattern WiiCompiled-Setup.exe --dir backend
           if ($LASTEXITCODE -ne 0) { throw 'Missing published backend setup.' }
           $info = (& ./backend/WiiCompiled-Setup.exe --info-json | Out-String) | ConvertFrom-Json
-          if ($LASTEXITCODE -ne 0 -or $info.productId -cne 'wiicompiled-openxr-vr' -or $info.openxrD3D12 -ne $true -or "v$($info.version)" -cne $release.tagName) { throw 'Published backend lacks the VR installation contract.' }
+          if ($LASTEXITCODE -ne 0 -or $info.productId -cne 'wiicompiled-openxr-vr' -or $info.openxrD3D12 -ne $true -or "$($info.version)" -cne ($release.tagName -replace '^v', '')) { throw 'Published backend lacks the VR installation contract.' }
       - name: Publish launcher
         shell: pwsh
         env:
